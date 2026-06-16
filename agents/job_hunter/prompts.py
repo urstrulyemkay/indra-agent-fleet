@@ -150,10 +150,10 @@ fit report, cold note to hiring manager). The agent writes each block to a separ
 ### Tailored CV
 
 ```markdown
-# Mani Kumar Jami
+# {OPERATOR_NAME}
 **<Reframed tagline>**
-Bengaluru · manikumarjami@gmail.com · +91-7992591090
-linkedin.com/in/manikumarjami · manikumarjami.com
+{OPERATOR_LOCATION} · {OPERATOR_EMAIL} · {OPERATOR_PHONE}
+{OPERATOR_LINKEDIN} · {OPERATOR_WEBSITE}
 
 ## Summary
 10+ years of experience <reframed for JD's primary domain>. <2-3 more sentences
@@ -252,13 +252,13 @@ Saw <Company> is hiring for <Title>. The <one specific JD signal — a product
 domain, a metric, an exact phrase from the JD> piece caught my eye because
 <one-line bridge to what Mani has actually shipped, using a canonical metric>.
 
-I'm currently AVP at TVS DriveX (running a $20M ARR portfolio across <reframed
-domain>), and I'd love to be considered. I've attached a CV tailored to this
-role. Open to a 20-minute conversation any day this week if useful.
+I'm currently <operator's current role and company>, and I'd love to be
+considered. I've attached a CV tailored to this role. Open to a 20-minute
+conversation any day this week if useful.
 
 Best,
-Mani Kumar Jami
-linkedin.com/in/manikumarjami · manikumarjami.com
+{OPERATOR_NAME}
+{OPERATOR_LINKEDIN} · {OPERATOR_WEBSITE}
 ```
 
 (80-120 words, direct, no em-dashes, no overclaiming. ONE specific JD signal

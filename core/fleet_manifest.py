@@ -156,7 +156,7 @@ FLEET: tuple[FleetEntry, ...] = (
         short_description="Emails personalized results to visitors who complete a /labs/ assessment and (optionally) subscribes them to the newsletter",
         description=(
             "Webhook endpoint on Indra that receives an assessment completion event from "
-            "manikumarjami.com/labs (Big Five, attachment style, career interest, cognitive, "
+            "$SITE_BASE_URL/labs (Big Five, attachment style, career interest, cognitive, "
             "student stress; PHQ-9 + GAD-7 are EXEMPT from gating per the lab's ethical carve-out). "
             "Renders a personalized summary email — top strengths, top growth edges, link back "
             "to the full report — and sends via Resend. Records the visitor's email in the "
@@ -197,9 +197,9 @@ FLEET: tuple[FleetEntry, ...] = (
     FleetEntry(
         name="seo_audit",
         label="SEO daily audit",
-        short_description="Daily SEO audit of manikumarjami.com — top 3-5 actionable suggestions pushed to GitHub at ~04:00 UTC",
+        short_description="Daily SEO audit of $SITE_BASE_URL — top 3-5 actionable suggestions pushed to GitHub at ~04:00 UTC",
         description=(
-            "Claude Cloud Routine that crawls manikumarjami.com each morning, runs technical and "
+            "Claude Cloud Routine that crawls $SITE_BASE_URL each morning, runs technical and "
             "content SEO checks (meta tags, schema, headings, internal links, sitemap freshness, "
             "broken links, page speed signals, title/description length, keyword coverage), and "
             "writes the top 3-5 actionable fixes for that day to seo-audit/YYYY-MM-DD.md on GitHub. "
@@ -213,7 +213,7 @@ FLEET: tuple[FleetEntry, ...] = (
         category="ops",
         workflow=(
             "Cloud routine fires daily ~04:00 UTC",
-            "Crawl: fetch manikumarjami.com root + /labs + /blog + /drivex (sitemap-driven)",
+            "Crawl: fetch $SITE_BASE_URL root + /labs + /blog + /drivex (sitemap-driven)",
             "Technical checks: meta tags, OpenGraph, Twitter cards, JSON-LD schema, robots, sitemap freshness, canonical tags, broken links, image alts",
             "Content checks: title/description length, H1 presence, heading hierarchy, keyword density vs intent",
             "(Optional) PostHog query: pull last-7-day pageviews per URL → weight findings by traffic",
@@ -221,7 +221,7 @@ FLEET: tuple[FleetEntry, ...] = (
             "Write seo-audit/YYYY-MM-DD.md to GitHub with the prioritized list + reasoning + suggested copy/diff where applicable",
         ),
         inputs=(
-            "manikumarjami.com — publicly fetched HTML + sitemap.xml + llms.txt",
+            "$SITE_BASE_URL — publicly fetched HTML + sitemap.xml + llms.txt",
             "(Optional) POSTHOG_API_KEY in routine env for pageview-weighted prioritization",
             "GitHub write access to urstrulyemkay/emkayjami for the seo-audit/ path",
         ),
@@ -353,27 +353,25 @@ FLEET: tuple[FleetEntry, ...] = (
         ),
     ),
     FleetEntry(
-        name="mapc_delivery",
-        label="MAPC study guide delivery",
-        short_description="Sends the MAPC Exam Prep PDF to subscribers via Resend — one unique download link per email, single-use + 48h expiry",
+        name="digital_delivery",
+        label="Digital product delivery",
+        short_description="Delivers any digital product (PDF, ebook, template) to subscribers via Resend — unique HMAC-signed download link per recipient, single-use + configurable expiry",
         description=(
-            "Engagement agent. When a student subscribes at manikumarjami.com/mapc, "
-            "the site POSTs to n8n which calls Resend directly for real-time delivery. "
-            "This agent is the manual/bulk companion: send or re-send the guide to any "
-            "email address, view delivery history in the Indra dashboard, and batch-send "
-            "to a list file. Each recipient gets a unique HMAC-signed download link that "
-            "works exactly once and expires after 48 hours — prevents link sharing. "
-            "Answers guide (with Block → Unit → Section source references) will be sent "
-            "as a follow-up email to the same subscriber list within 48 hours of the "
-            "initial PDF delivery."
+            "Engagement agent for fulfilling digital product downloads. When a subscriber "
+            "requests your product, this agent issues a unique HMAC-signed token, builds a "
+            "single-use download URL, and sends a branded delivery email via Resend. "
+            "The manual/bulk companion to a real-time webhook trigger: send or re-send to "
+            "any email, batch-send from a list file, and view delivery history in the "
+            "Indra dashboard. Fully configurable via env vars — PRODUCT_NAME, SITE_BASE_URL, "
+            "DELIVERY_GATE_PATH, ASSESS_SECRET — no code changes needed per product."
         ),
         built=True,
         production_status="live",
-        runtime="Indra (local) + n8n Cloud (real-time website trigger)",
+        runtime="Indra (local) + optional n8n Cloud (real-time website trigger)",
         category="engagement",
         workflow=(
             "Input: single email or path to newline-separated email list",
-            "Validate inputs and confirm RESEND_API_KEY is set",
+            "Validate inputs and confirm RESEND_API_KEY + ASSESS_SECRET are set",
             "Generate HMAC-signed single-use download URL per recipient",
             "Send branded delivery email via Resend (HTML + plain text)",
             "Log success/failure per recipient as markdown artifact",
@@ -382,20 +380,23 @@ FLEET: tuple[FleetEntry, ...] = (
             "email: str  — single recipient",
             "emails: list[str]  — multiple recipients",
             "--list <file>  — path to newline-separated email list (CLI)",
+            "PRODUCT_NAME in .env (display name, e.g. 'Python Crash Course PDF')",
+            "PRODUCT_SLUG in .env (used in token signing, e.g. 'python-course')",
             "RESEND_API_KEY in .env",
             "ASSESS_SECRET in .env (for HMAC token signing)",
-            "SITE_BASE_URL in .env (defaults to https://manikumarjami.com)",
+            "SITE_BASE_URL in .env (your site base)",
+            "DELIVERY_GATE_PATH in .env (e.g. /api/download)",
         ),
         outputs=(
             "Transactional delivery email to each recipient",
-            "outputs/mapc_deliveries/<timestamp>-delivery.md — per-recipient status log",
-            "Artifact row in Indra surfaced at /agent/mapc_delivery",
+            "outputs/digital_delivery/<timestamp>-delivery.md — per-recipient status log",
+            "Artifact row in Indra surfaced at /agent/digital_delivery",
         ),
         rationale=(
-            "Students who subscribe at /mapc deserve immediate, reliable delivery. "
-            "The n8n path handles real-time website-triggered sends (laptop-off safe). "
-            "This Indra agent handles re-sends, bulk campaigns, and delivery auditing "
-            "from the dashboard — the operator sees every send in one place."
+            "Subscribers who sign up for a digital product deserve immediate, reliable "
+            "delivery. The n8n/webhook path handles real-time website-triggered sends "
+            "(works even when your laptop is off). This Indra agent handles re-sends, "
+            "bulk campaigns, and delivery auditing from the dashboard — every send in one place."
         ),
     ),
     FleetEntry(
@@ -403,7 +404,7 @@ FLEET: tuple[FleetEntry, ...] = (
         label="Gold & silver rates",
         short_description="Daily India gold/silver rates page (15 cities) + >5% move email alerts",
         description=(
-            "Engagement agent for the manikumarjami.com/gold-rates SEO page. A daily Vercel "
+            "Engagement agent for the $SITE_BASE_URL/gold-rates SEO page. A daily Vercel "
             "Cron (api/gold-rates-cron.js) fetches live XAU/XAG spot prices (gold-api.com) and "
             "USD-INR forex (frankfurter.dev), computes India national rates (24K/22K/18K gold "
             "+ silver, with import duty + GST) and 15 city-adjusted rates, and writes the "
@@ -433,7 +434,7 @@ FLEET: tuple[FleetEntry, ...] = (
             "Dashboard view at /agent/gold_rates (current rates, change %, subscriber count)",
         ),
         rationale=(
-            "manikumarjami.com/gold-rates is a programmatic-SEO page (1 hub + 15 city pages) "
+            "$SITE_BASE_URL/gold-rates is a programmatic-SEO page (1 hub + 15 city pages) "
             "targeting 'gold rate today <city>' searches, doubling as a newsletter funnel "
             "('Gold & Silver Alerts'). This agent gives the operator one place to confirm the "
             "daily Vercel cron actually ran, rates are fresh, and the alert list is growing — "

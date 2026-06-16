@@ -73,15 +73,15 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app = FastAPI(title="Indra")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-# CORS — only allow the personalwebsite/labs origin (localhost dev + production).
+# CORS — allow your site origin (set SITE_ORIGIN in .env) plus localhost for dev.
 # The labs site POSTs to /api/labs/results-email from the browser, so it needs an
 # Access-Control-Allow-Origin header. We allow specific origins, NOT "*", because
 # /api endpoints touch user-owned state (signups, sends).
+_site_origin = os.getenv("SITE_ORIGIN", "").strip().rstrip("/")
 _LABS_ORIGINS = [
-    "http://localhost:8000",       # python -m http.server, per labs CLAUDE.md
+    "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "https://manikumarjami.com",
-    "https://www.manikumarjami.com",
+    *([_site_origin, f"https://www.{_site_origin.removeprefix('https://')}"] if _site_origin else []),
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -348,7 +348,7 @@ def _startup() -> None:
         except Exception:
             pass
         try:
-            _mapc_delivery_stats()
+            _digital_delivery_stats()
         except Exception:
             pass
         try:
@@ -717,7 +717,7 @@ def _ig_activity_feed(limit: int = 60) -> list[dict]:
                             "level": "error" if e.get("status") == "error" else "info",
                             "title": f"webhook execution #{e['id']}",
                             "status": e.get("status"),
-                            "link": f"https://umcrazy.app.n8n.cloud/workflow/{wf_id}/executions/{e['id']}",
+                            "link": f"{os.getenv('N8N_API_BASE_URL','').replace('/api/v1','')}/workflow/{wf_id}/executions/{e['id']}",
                         })
         except Exception:
             pass
@@ -1360,7 +1360,8 @@ def api_tm_stats(request: Request):
 _LABS_STATS_CACHE: dict = {"ts": 0.0, "data": None}
 _LABS_STATS_TTL = 60.0  # 1 min — Resend has the data; we just surface it. No persistence.
 
-_MAPC_STATS_CACHE: dict = {"ts": 0.0, "data": None}
+_DELIVERY_STATS_CACHE: dict = {"ts": 0.0, "data": None}
+_MAPC_STATS_CACHE = _DELIVERY_STATS_CACHE   # backward compat alias
 _MAPC_STATS_TTL = 60.0
 
 _GOLD_STATS_CACHE: dict = {"ts": 0.0, "data": None}
@@ -1381,7 +1382,7 @@ def _labs_emailer_stats() -> dict:
     out: dict = {
         "configured": False,
         "domain_verified": False,
-        "domain_name": "labs.manikumarjami.com",
+        "domain_name": os.getenv("LABS_DOMAIN", ""),
         "today_count": 0,
         "week_count": 0,
         "total_visible": 0,
@@ -1491,7 +1492,7 @@ def _labs_emailer_stats() -> dict:
     return out
 
 
-def _mapc_delivery_stats() -> dict:
+def _digital_delivery_stats() -> dict:
     """Query Resend for MAPC guide delivery emails. Cached 60s. No local storage."""
     import datetime as _dt
     now = time.time()
@@ -1518,9 +1519,8 @@ def _mapc_delivery_stats() -> dict:
     out["configured"] = True
     HDR = {"Authorization": f"Bearer {key}"}
 
-    _TEST_EMAILS = {"manikumarjami1@gmail.com", "manikumarjami007@gmail.com",
-                    "manikumarjami@gmail.com", "iamemkayjami@gmail.com",
-                    "ratelimit_test_qa@example.com"}
+    _raw_test = os.getenv("DELIVERY_TEST_EMAILS", "ratelimit_test_qa@example.com")
+    _TEST_EMAILS = {e.strip().lower() for e in _raw_test.split(",") if e.strip()}
     _IST = _dt.timedelta(hours=5, minutes=30)
 
     def _to_ist(ts_raw: str) -> str:
@@ -1603,25 +1603,37 @@ def _mapc_delivery_stats() -> dict:
     return out
 
 
-@app.get("/api/mapc-stats", response_class=HTMLResponse)
-def api_mapc_stats(request: Request):
+@app.get("/api/delivery-stats", response_class=HTMLResponse)
+def api_delivery_stats(request: Request):
     resp = templates.TemplateResponse(
         "_mapc_console.html",
-        {"request": request, "mapc": _mapc_delivery_stats()},
+        {"request": request, "mapc": _digital_delivery_stats()},
     )
     resp.headers["Cache-Control"] = "private, max-age=60"
     return resp
 
 
-@app.get("/agent/mapc_delivery", response_class=HTMLResponse)
-def page_mapc_delivery(request: Request):
+@app.get("/api/mapc-stats", response_class=HTMLResponse)
+def api_mapc_stats_redirect(request: Request):
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/api/delivery-stats", status_code=301)
+
+
+@app.get("/agent/digital_delivery", response_class=HTMLResponse)
+def page_digital_delivery(request: Request):
     return _render(
         request,
         "_mapc_console.html",
         active_view="agent",
-        active_agent="mapc_delivery",
-        mapc=_mapc_delivery_stats(),
+        active_agent="digital_delivery",
+        mapc=_digital_delivery_stats(),
     )
+
+
+@app.get("/agent/mapc_delivery", response_class=HTMLResponse)
+def page_mapc_delivery_redirect(request: Request):
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/agent/digital_delivery", status_code=301)
 
 
 def _gold_rates_stats() -> dict:
@@ -2699,11 +2711,8 @@ def page_confirm(request: Request, token: str):
     )
 
 
-_OWNER_EMAILS = {
-    "manikumarjami@gmail.com", "manikumarjami1@gmail.com",
-    "manikumarjami007@gmail.com", "iamemkayjami@gmail.com",
-    "ratelimit_test_qa@example.com",
-}
+_raw_owner = os.getenv("OWNER_EMAILS", "ratelimit_test_qa@example.com")
+_OWNER_EMAILS = {e.strip().lower() for e in _raw_owner.split(",") if e.strip()}
 
 def _to_ist(ts_raw: str) -> str:
     """Convert UTC timestamp string to IST (UTC+5:30) formatted string."""
@@ -2955,12 +2964,12 @@ def page_unsubscribe(request: Request, token: str):
     return _render(request, "_unsubscribed.html", active_view="", row=row)
 
 
-@app.post("/api/mapc-retry")
-def api_mapc_retry(request: Request):
-    """Process the MAPC pending email queue.
-    Called manually or by a scheduled task at 00:05 UTC when Resend quota resets.
-    Reads mapc_pending.json from GitHub, sends queued emails, clears processed entries."""
-    from agents.mapc_delivery.retry import process_queue
+@app.post("/api/delivery-retry")
+def api_delivery_retry(request: Request):
+    """Process the pending email delivery queue.
+    Called manually or by a scheduled task when Resend quota resets.
+    Reads the queue from GitHub Gist, retries sends, clears processed entries."""
+    from agents.digital_delivery.retry import process_queue
     try:
         result = process_queue(dry_run=False)
         return JSONResponse(result)
@@ -2968,18 +2977,30 @@ def api_mapc_retry(request: Request):
         return JSONResponse({"error": str(exc)[:200]}, status_code=500)
 
 
-@app.get("/api/mapc-queue-status")
-def api_mapc_queue_status(request: Request):
+@app.get("/api/delivery-queue-status")
+def api_delivery_queue_status(request: Request):
     """Show how many emails are currently queued for retry."""
-    from agents.mapc_delivery.retry import _fetch_pending
+    from agents.digital_delivery.retry import _fetch_pending
     try:
         pending, _ = _fetch_pending()
         return JSONResponse({
             "queued": len(pending),
-            "emails": [{"email": e["email"], "spec": e.get("specialisation"), "queued_at": e.get("queued_at")} for e in pending]
+            "emails": [{"email": e.get("email"), "queued_at": e.get("queued_at")} for e in pending],
         })
     except Exception as exc:
         return JSONResponse({"error": str(exc)[:200], "queued": 0}, status_code=500)
+
+
+@app.post("/api/mapc-retry")
+def api_mapc_retry_redirect(request: Request):
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/api/delivery-retry", status_code=307)
+
+
+@app.get("/api/mapc-queue-status")
+def api_mapc_queue_redirect(request: Request):
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/api/delivery-queue-status", status_code=301)
 
 
 def run() -> None:

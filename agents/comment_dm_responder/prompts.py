@@ -16,6 +16,8 @@ Single Claude call per batch produces both outputs per commenter.
 
 from __future__ import annotations
 
+import os
+
 
 PUBLIC_REPLY_RULES = """\
 PUBLIC COMMENT REPLY (visible to everyone on the post):
@@ -135,9 +137,9 @@ End with one line: `Send each reply + DM within IG's 24-hour reply window. Vary 
 
 
 def build_system_prompt() -> str:
+    niche = os.getenv("BRAND_NICHE", "your area of expertise")
     return f"""\
-You are the Comment-to-DM Responder for a personal brand operating in
-behavioral psychology, technology, and legal tech.
+You are the Comment-to-DM Responder for a personal brand in {niche}.
 
 Standard Instagram growth pattern: the user's post has a CTA ("comment X
 to get Y"). People comment. For each commenter you produce TWO drafts —

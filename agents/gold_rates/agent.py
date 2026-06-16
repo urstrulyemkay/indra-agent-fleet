@@ -1,10 +1,9 @@
 """Gold & Silver Rates agent.
 
-Reads the daily gold/silver rates snapshot written by the Vercel cron
-(`api/gold-rates-cron.js` on manikumarjami.com) from the public price-data
-Gist, checks subscriber count on the "Gold & Silver Alerts" Brevo list, and
-writes a markdown report artifact. Use to verify the daily cron ran and
-rates are fresh.
+Reads the daily gold/silver rates snapshot (written by a daily cron to a
+public GitHub Gist) from the Gist JSON, checks subscriber count on a Brevo
+email list, and writes a markdown report artifact. Use to verify the daily
+cron ran and rates are fresh.
 
 Realm: Engagement (Devi) — subscriber-facing rates + alerts.
 Astra: कलश (Kalash) — the wealth/abundance vessel.

@@ -1,22 +1,27 @@
-"""MAPC Report Delivery agent.
+"""Digital Delivery agent.
 
-Sends the MAPC Exam Prep PDF download link to one or more email addresses
-via Resend. Generates a single-use HMAC-signed download token per recipient
-so each link works exactly once.
+Sends a signed single-use download link for any digital product (PDF, ebook,
+template, report) to one or more email addresses via Resend.
 
-Realm: Engagement (Devi) — subscriber fulfilment.
-Astra: चन्द्र (Chandra) — the moon that illuminates study paths.
+Pattern:
+  subscriber confirms → this agent issues an HMAC-signed token → sends an
+  email with a link valid for TOKEN_TTL_HOURS → the receiving server verifies
+  the token before serving the file.
+
+Configure via .env:
+  PRODUCT_NAME          — display name in emails (e.g. "Python Crash Course PDF")
+  PRODUCT_SLUG          — short ID used in token signing (e.g. "python-course")
+  SITE_BASE_URL         — base of your site (e.g. https://yoursite.com)
+  DELIVERY_GATE_PATH    — path on your server that validates tokens (e.g. /api/download)
+  ASSESS_SECRET         — HMAC signing key (keep secret, rotate regularly)
+  RESEND_API_KEY        — Resend transactional email key
+  RESEND_FROM_EMAIL     — verified sender address (e.g. "You <hello@yoursite.com>")
+  DELIVERY_SUBJECT      — email subject line
+  TOKEN_TTL_HOURS       — hours before link expires (default: 48)
 
 CLI:
-  python -m agents.mapc_delivery --email student@example.com
-  python -m agents.mapc_delivery --list ./emails.txt
-  python -m agents.mapc_delivery --resend-to student@example.com  (re-issue fresh link)
-
-The live website trigger goes directly through the n8n → Resend path (always-on).
-This agent is for:
-  - Manual / bulk sends
-  - Re-issuing expired links
-  - Dashboard visibility & delivery log
+  python -m agents.digital_delivery --email student@example.com
+  python -m agents.digital_delivery --list ./emails.txt
 """
 
 from __future__ import annotations
@@ -35,14 +40,17 @@ from core.base_agent import BaseAgent, WorkflowStep
 from .prompts import build_delivery_email_html, build_delivery_email_text
 
 
-SITE_BASE = os.getenv("SITE_BASE_URL", "https://manikumarjami.com")
-ASSESS_SECRET = os.getenv("ASSESS_SECRET", "")
-TOKEN_TTL_HOURS = 48
+SITE_BASE        = os.getenv("SITE_BASE_URL", "https://yoursite.com")
+GATE_PATH        = os.getenv("DELIVERY_GATE_PATH", "/api/download")
+PRODUCT_NAME     = os.getenv("PRODUCT_NAME", "Your Digital Product")
+PRODUCT_SLUG     = os.getenv("PRODUCT_SLUG", "product")
+ASSESS_SECRET    = os.getenv("ASSESS_SECRET", "")
+TOKEN_TTL_HOURS  = int(os.getenv("TOKEN_TTL_HOURS", "48"))
 
 
 def _sign_download_token(email: str, ts: int) -> str:
-    """HMAC-SHA256 token: email|timestamp signed with ASSESS_SECRET."""
-    payload = f"{email}|{ts}|mapc"
+    """HMAC-SHA256 token: email|timestamp|slug signed with ASSESS_SECRET."""
+    payload = f"{email}|{ts}|{PRODUCT_SLUG}"
     return hmac.new(
         ASSESS_SECRET.encode() or b"dev-secret",
         payload.encode(),
@@ -51,23 +59,23 @@ def _sign_download_token(email: str, ts: int) -> str:
 
 
 def build_download_url(email: str) -> str:
-    ts = int(time.time())
+    ts  = int(time.time())
     sig = _sign_download_token(email, ts)
-    return f"{SITE_BASE}/api/mapc-download?email={email}&ts={ts}&sig={sig}"
+    return f"{SITE_BASE}{GATE_PATH}?email={email}&ts={ts}&sig={sig}"
 
 
-class MacpDeliveryAgent(BaseAgent):
-    name = "mapc_delivery"
+class DigitalDeliveryAgent(BaseAgent):
+    name = "digital_delivery"
     description = (
-        "Delivers the MAPC Exam Prep study guide to subscribers via Resend. "
-        "Issues a unique single-use download link per recipient. "
-        "Use for manual sends, bulk delivery, and re-issue of expired links."
+        "Delivers a signed single-use download link for any digital product to "
+        "one or more subscribers via Resend. Handles manual sends, bulk delivery, "
+        "and re-issue of expired links. Configure PRODUCT_NAME + SITE_BASE_URL in .env."
     )
     workflow_steps = [
         WorkflowStep(
             key="validate",
             label="Validate inputs",
-            description="Check email list, verify RESEND_API_KEY and ASSESS_SECRET are set.",
+            description="Check email list; verify RESEND_API_KEY and ASSESS_SECRET are set.",
         ),
         WorkflowStep(
             key="tokenise",
@@ -86,12 +94,12 @@ class MacpDeliveryAgent(BaseAgent):
         ),
     ]
 
-    def _run(self, task: str, **kwargs) -> str:  # noqa: ARG002
+    def _run(self, task: str, **kwargs) -> str:
         emails: list[str] = kwargs.get("emails", [])
         if not emails:
             raise ValueError("No email addresses provided. Pass emails=[...] or use CLI.")
 
-        self.set_status("running", current_task=f"Delivering to {len(emails)} recipient(s)")
+        self.set_status("running", current_task=f"Delivering {PRODUCT_NAME} to {len(emails)} recipient(s)")
 
         # ── Step 1: Validate ──────────────────────────────────────────────
         self.step("validate")
@@ -99,12 +107,14 @@ class MacpDeliveryAgent(BaseAgent):
             self.log("RESEND_API_KEY not set in .env", level="error")
             raise RuntimeError("RESEND_API_KEY not set")
         if not ASSESS_SECRET:
-            self.log("ASSESS_SECRET not set — tokens will use dev fallback", level="warning")
+            self.log("ASSESS_SECRET not set — tokens will use dev fallback (not safe in production)", level="warning")
 
-        from_addr = os.getenv(
-            "RESEND_FROM_EMAIL",
-            "Mani Kumar Jami <hello@manikumarjami.com>"
-        )
+        from_addr = os.getenv("RESEND_FROM_EMAIL", "")
+        if not from_addr:
+            self.log("RESEND_FROM_EMAIL not set in .env", level="error")
+            raise RuntimeError("RESEND_FROM_EMAIL not set — add it to .env")
+
+        subject = os.getenv("DELIVERY_SUBJECT", f"Your {PRODUCT_NAME} is ready ↓")
 
         # ── Step 2: Tokenise ──────────────────────────────────────────────
         self.step("tokenise")
@@ -122,7 +132,7 @@ class MacpDeliveryAgent(BaseAgent):
             text = build_delivery_email_text(d["email"], d["url"])
             ok, err = resend_client.send(
                 to=d["email"],
-                subject="Your MAPC Exam Prep Guide is ready ↓",
+                subject=subject,
                 html=html,
                 text=text,
                 from_addr=from_addr,
@@ -130,16 +140,17 @@ class MacpDeliveryAgent(BaseAgent):
             if ok:
                 d["status"] = "sent"
                 sent += 1
-                self.log(f"✓ Sent to {d['email']}")
+                self.log(f"Sent to {d['email']}")
             else:
                 d["status"] = f"failed: {err}"
                 failed += 1
-                self.log(f"✗ Failed for {d['email']}: {err}", level="error")
+                self.log(f"Failed for {d['email']}: {err}", level="error")
 
         # ── Step 4: Report ────────────────────────────────────────────────
         self.step("report")
         lines = [
-            f"# MAPC Delivery Report — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            f"# {PRODUCT_NAME} — Delivery Report",
+            f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             f"\n**Sent:** {sent}  **Failed:** {failed}  **Total:** {len(deliveries)}\n",
             "| Email | Status |",
             "|-------|--------|",
@@ -149,15 +160,14 @@ class MacpDeliveryAgent(BaseAgent):
 
         report = "\n".join(lines)
 
-        out_dir = Path(os.getenv("OUTPUTS_DIR", "./outputs")) / "mapc_deliveries"
+        out_dir = Path(os.getenv("OUTPUTS_DIR", "./outputs")) / "digital_delivery"
         out_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         out_path = out_dir / f"{ts}-delivery.md"
         out_path.write_text(report)
 
-        self.record_artifact("delivery_report", f"MAPC delivery {ts}", str(out_path))
+        self.record_artifact("delivery_report", f"Delivery {ts} — {PRODUCT_NAME}", str(out_path))
         self.set_status("idle")
 
-        summary = f"Delivered {sent}/{len(deliveries)} emails."
-        self.log(summary)
+        self.log(f"Delivered {sent}/{len(deliveries)} emails.")
         return report

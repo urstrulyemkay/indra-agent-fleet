@@ -1,5 +1,5 @@
-"""CLI: python -m agents.mapc_delivery --email a@b.com [--email c@d.com ...]
-         python -m agents.mapc_delivery --list ./emails.txt
+"""CLI: python -m agents.digital_delivery --email a@b.com [--email c@d.com ...]
+         python -m agents.digital_delivery --list ./emails.txt
 """
 
 from __future__ import annotations
@@ -11,11 +11,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from .agent import MacpDeliveryAgent
+from .agent import DigitalDeliveryAgent
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Send MAPC study guide to subscriber(s)")
+    parser = argparse.ArgumentParser(
+        description="Send a signed download link for your digital product to subscriber(s)"
+    )
     parser.add_argument("--email", action="append", dest="emails", metavar="EMAIL",
                         help="Recipient email (repeat for multiple)")
     parser.add_argument("--list", dest="email_file", metavar="FILE",
@@ -34,7 +36,7 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    agent = MacpDeliveryAgent()
+    agent = DigitalDeliveryAgent()
     result = agent.run(task="deliver", emails=emails)
     print(result)
 

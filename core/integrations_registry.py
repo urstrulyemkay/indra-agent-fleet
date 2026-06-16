@@ -143,7 +143,7 @@ INTEGRATIONS: tuple[Integration, ...] = (
         cost="free, keyless",
         used_by=("gold_rates",),
         docs_url="https://gold-api.com",
-        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on manikumarjami.com, not by this fleet directly. No API key or auth needed.",
+        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on $SITE_BASE_URL, not by this fleet directly. No API key or auth needed.",
     ),
     Integration(
         name="frankfurter.dev",
@@ -153,7 +153,7 @@ INTEGRATIONS: tuple[Integration, ...] = (
         cost="free, keyless",
         used_by=("gold_rates",),
         docs_url="https://frankfurter.dev",
-        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on manikumarjami.com, not by this fleet directly. No API key required.",
+        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on $SITE_BASE_URL, not by this fleet directly. No API key required.",
     ),
     Integration(
         name="Brevo",
@@ -164,7 +164,7 @@ INTEGRATIONS: tuple[Integration, ...] = (
         env_vars=("BREVO_API_KEY", "BREVO_GOLD_LIST_ID"),
         used_by=("gold_rates",),
         docs_url="https://developers.brevo.com",
-        notes="Alert sends + list signups happen from manikumarjami.com's Vercel functions; this dashboard only reads the subscriber count for /agent/gold_rates. Both sides no-op gracefully if unset.",
+        notes="Alert sends + list signups happen from $SITE_BASE_URL's Vercel functions; this dashboard only reads the subscriber count for /agent/gold_rates. Both sides no-op gracefully if unset.",
     ),
     Integration(
         name="Postiz",

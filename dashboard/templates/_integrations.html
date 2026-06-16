@@ -1,0 +1,92 @@
+<div>
+  <div class="mb-7">
+    <h1 class="display-serif page-title text-3xl text-ivory">Integrations</h1>
+    <p class="text-xs text-zinc-500 mt-2">Every external tool the fleet talks to. <span class="text-saffron-600/80">Live</span> = wired now. <span class="text-zinc-500">Optional</span> = available, no auth required. <span class="text-saffron-700/80">Planned</span> = roadmap agent depends on it.</p>
+  </div>
+
+  {% set groups = {
+    'llm':           'Models',
+    'automation':    'Automation & Runtimes',
+    'observability': 'Observability',
+    'social':        'Social Platforms',
+    'data_source':   'Data Sources',
+    'email':         'Email',
+    'scheduler':     'Scheduling',
+    'scraper':       'Scrapers',
+    'image_render':  'Rendering',
+  } %}
+
+  {% for kind, kind_label in groups.items() %}
+    {% set group_rows = states | selectattr('integration.kind', 'equalto', kind) | list %}
+    {% if group_rows %}
+      <section class="mb-7">
+        <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-3">{{ kind_label }}</h2>
+        <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl divide-y divide-midnight-800">
+          {% for row in group_rows %}
+            {% set i = row.integration %}
+            {% set status_color =
+              'text-saffron-400 border-saffron-500/40' if i.status == 'live' else
+              'text-zinc-400 border-midnight-700'      if i.status == 'optional' else
+              'text-saffron-700 border-saffron-700/30' %}
+            <div class="px-4 py-3.5">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 mb-1">
+                    {% if row.live_check is sameas true %}
+                      <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" title="connected (verified)"></span>
+                    {% elif row.live_check is sameas false %}
+                      <span class="inline-block w-1.5 h-1.5 rounded-full bg-sindoor-400" title="key set but ping failed"></span>
+                    {% else %}
+                      <span class="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" title="no programmatic ping"></span>
+                    {% endif %}
+                    <span class="text-sm font-medium text-ivory">{{ i.name }}</span>
+                    <span class="text-[9px] uppercase tracking-widest border rounded-full px-1.5 py-0.5 {{ status_color }}">{{ i.status }}</span>
+                    <span class="text-[10px] text-zinc-600 ml-1">{{ i.cost }}</span>
+                  </div>
+                  <div class="text-xs text-zinc-400">{{ i.purpose }}</div>
+                  {% if i.used_by %}
+                    <div class="text-[10px] text-zinc-600 mt-1.5">
+                      used by:
+                      {% for agent in i.used_by %}
+                        <span class="text-zinc-500">{{ agent }}</span>{% if not loop.last %}, {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if i.env_vars %}
+                    <div class="text-[10px] mt-1.5 flex flex-wrap gap-1.5">
+                      {% for v in i.env_vars %}
+                        {% set set_ok = row.env_state.get(v) %}
+                        <span class="font-mono px-1.5 py-0.5 rounded border
+                          {% if set_ok %}text-saffron-400 border-saffron-600/30{% else %}text-zinc-600 border-midnight-700 border-dashed{% endif %}">
+                          {{ v }}{% if set_ok %} ✓{% else %} ·{% endif %}
+                        </span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if i.notes %}
+                    <div class="text-[11px] text-zinc-600 mt-2 italic">{{ i.notes }}</div>
+                  {% endif %}
+                </div>
+                <div class="shrink-0 text-right">
+                  {% if i.docs_url %}
+                    <a href="{{ i.docs_url }}" target="_blank" rel="noopener" class="text-[10px] text-zinc-500 hover:text-saffron-400 transition">docs →</a>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  {% endfor %}
+
+  <div class="mt-8 bg-midnight-900/40 border border-midnight-800 rounded-xl p-5">
+    <h3 class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">How this works</h3>
+    <p class="text-xs text-zinc-400 leading-relaxed">
+      The fleet stays operational even when integrations are missing. Every integration is checked at runtime —
+      if required env vars are unset, the dependent agent falls back gracefully (Langfuse → code prompts, Playwright →
+      markdown-only carousels, IG API → paste-mode, etc.). Add an integration's env vars to <span class="font-mono text-saffron-600/80">.env</span>
+      and restart the dashboard to wire it up.
+    </p>
+  </div>
+</div>

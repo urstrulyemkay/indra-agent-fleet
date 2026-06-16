@@ -1,0 +1,118 @@
+{# Live ops console — renders on page load. Refresh the page to update. #}
+{% set outcomes = {
+  'link_sent': ('Link sent',          'text-emerald-400'),
+  'gated':     ('Gated DM',            'text-saffron-300'),
+  'regated':   ('Re-gated',            'text-saffron-300'),
+  'dedup':     ('Already sent — skip', 'text-zinc-500'),
+  'spam':      ('Spam filtered',       'text-zinc-500'),
+  'no_config': ('No campaign config',  'text-amber-400'),
+  'errors':    ('Error',               'text-sindoor-400'),
+  'unknown':   ('Unknown outcome',     'text-zinc-500'),
+  'own_reply': ('Own echo (skipped)',  'text-zinc-600'),
+} %}
+
+<!-- Hero card -->
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if ig.active %}
+          <span class="pill pill-live"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live"></span>LIVE</span>
+        {% else %}
+          <span class="pill pill-roadmap">paused</span>
+        {% endif %}
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">runtime · n8n</span>
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">Instagram auto-comment and DM</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">Replies to comments on your IG posts. Sends the link via DM to followers; gates non-followers with a follow-first quick-reply.</p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0">
+      <a href="/agent/comment_dm_responder" hx-get="/agent/comment_dm_responder" hx-target="#main" hx-push-url="/agent/comment_dm_responder"
+         class="text-xs text-saffron-400 hover:text-saffron-300 transition">Open agent →</a>
+      {% if ig.last_event_ts %}
+        <span class="text-[11px] text-zinc-600 font-mono">last: {{ ig.last_event_ts[11:19] }} UTC</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Today</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ ig.today.total }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">events handled</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Links sent</div>
+      <div class="stat-num display-serif text-2xl text-emerald-400 mt-1">{{ ig.today.link_sent }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">DMs delivered</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Gated</div>
+      <div class="stat-num display-serif text-2xl text-saffron-300 mt-1">{{ ig.today.gated + ig.today.regated }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">awaiting follow</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Errors</div>
+      <div class="stat-num display-serif text-2xl mt-1 {% if ig.today.errors %}text-sindoor-400{% else %}text-ivory{% endif %}">{{ ig.today.errors }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">today</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <!-- Posts wired up -->
+  <div class="card p-5 lg:col-span-1">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Posts wired up</h2>
+      <span class="text-[10px] text-zinc-600">{{ ig.posts|length }}</span>
+    </div>
+    {% if ig.posts %}
+      <div class="space-y-2">
+        {% for p in ig.posts %}
+          <div class="bg-midnight-900/40 border border-midnight-800 rounded-md px-3 py-2.5">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[11px] text-zinc-500">{{ p.post_id[:6] }}…{{ p.post_id[-4:] }}</span>
+              {% if p.send_dm %}<span class="pill pill-live text-[9px] py-0">DM on</span>{% else %}<span class="text-[9px] text-zinc-600">reply only</span>{% endif %}
+            </div>
+            <div class="text-[12px] text-ivory mt-1 truncate">{{ p.campaign or '—' }}</div>
+            {% if p.payload %}
+              <div class="text-[10px] text-zinc-600 mt-0.5 truncate font-mono">{{ p.payload }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600">No posts configured yet.</p>
+    {% endif %}
+    <div class="mt-3 text-[10px] text-zinc-600 font-mono leading-relaxed">
+      python -m core.n8n_deployer<br>
+      --add-post …
+    </div>
+  </div>
+
+  <!-- Recent activity -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Recent activity</h2>
+      <a href="/activity" hx-get="/activity" hx-target="#main" hx-push-url="/activity" class="text-[11px] text-zinc-600 hover:text-saffron-400">view all →</a>
+    </div>
+    {% if ig.recent %}
+      <div class="divide-y divide-midnight-800">
+        {% for r in ig.recent %}
+          {% set label, color = outcomes.get(r.outcome, (r.outcome, 'text-zinc-500')) %}
+          <div class="flex items-center gap-3 py-2">
+            <span class="font-mono text-[11px] text-zinc-600 w-20 shrink-0">{{ r.ts[11:19] }}</span>
+            <span class="text-[11px] text-zinc-600 w-12 shrink-0 font-mono">{% if r.kind == 'quickreply' %}tap{% else %}cmt{% endif %}</span>
+            <span class="text-[12px] {{ color }} w-44 shrink-0 truncate">{{ label }}</span>
+            <span class="text-[12px] text-zinc-400 truncate">{{ r.sender }}</span>
+            {% if r.status == 'error' %}
+              <span class="ml-auto text-[10px] text-sindoor-400">err</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 py-4">No activity yet. Comment on a configured post to see events appear here.</p>
+    {% endif %}
+  </div>
+</div>

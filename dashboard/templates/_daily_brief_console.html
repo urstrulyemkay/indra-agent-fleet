@@ -1,0 +1,116 @@
+{# Daily AI brief console — overview-page card with counter, streak, domain breakdown, avg confidence. #}
+{% set bs = brief_stats %}
+{% set max_domain_count = (bs.domains|map(attribute=1)|max) if bs.domains else 0 %}
+
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="pill pill-live"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live"></span>LIVE</span>
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">runtime · cloud routines → github</span>
+        {% if bs.days_since_latest is not none %}
+          {% if bs.days_since_latest == 0 %}
+            <span class="text-[10px] text-emerald-400">today's brief published</span>
+          {% elif bs.days_since_latest == 1 %}
+            <span class="text-[10px] text-saffron-300">last brief: 1 day ago</span>
+          {% else %}
+            <span class="text-[10px] text-sindoor-400">last brief: {{ bs.days_since_latest }} days ago — routine may be paused</span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">Daily AI brief</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">One long-form curated story per day from the AI ecosystem — autonomous publisher.</p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0">
+      <a href="/agent/daily_ai_brief" hx-get="/agent/daily_ai_brief" hx-target="#main" hx-push-url="/agent/daily_ai_brief"
+         class="text-xs text-saffron-400 hover:text-saffron-300 transition">Read briefs →</a>
+      <span class="text-[11px] text-zinc-600 font-mono">latest: {{ bs.latest_date or '—' }}</span>
+    </div>
+  </div>
+
+  <!-- Core stat row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Total briefs</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ bs.total }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">in archive</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Streak</div>
+      <div class="stat-num display-serif text-2xl text-emerald-400 mt-1">{{ bs.streak_days }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">consecutive days</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Avg confidence</div>
+      <div class="stat-num display-serif text-2xl text-saffron-300 mt-1">
+        {% if bs.avg_confidence is not none %}{{ bs.avg_confidence }}<span class="text-base text-zinc-500">%</span>{% else %}—{% endif %}
+      </div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">across all briefs</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Domains</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ bs.domains|length }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">distinct covered</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+  <!-- Domain breakdown -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Domains covered</h2>
+      <span class="text-[10px] text-zinc-600">top {{ bs.domains|length }}</span>
+    </div>
+    {% if bs.domains %}
+      <div class="space-y-2.5">
+        {% for domain, count in bs.domains %}
+          <div>
+            <div class="flex items-baseline justify-between mb-1">
+              <span class="text-[12px] text-ivory truncate">{{ domain }}</span>
+              <span class="text-[11px] text-zinc-500 font-mono">{{ count }}</span>
+            </div>
+            <div class="h-1.5 bg-midnight-900 rounded overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-saffron-600 to-saffron-400 rounded"
+                   style="width: {{ ((count / max_domain_count) * 100)|round(0)|int if max_domain_count else 0 }}%"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600">No domain data yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Recent brief titles -->
+  <div class="card p-5 lg:col-span-3">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Latest briefs</h2>
+      <a href="/agent/daily_ai_brief" hx-get="/agent/daily_ai_brief" hx-target="#main" hx-push-url="/agent/daily_ai_brief" class="text-[11px] text-zinc-600 hover:text-saffron-400">view archive →</a>
+    </div>
+    {% if bs.recent_titles %}
+      <div class="divide-y divide-midnight-800">
+        {% for r in bs.recent_titles %}
+          <a href="/agent/daily_ai_brief?date={{ r.date }}"
+             hx-get="/agent/daily_ai_brief?date={{ r.date }}"
+             hx-target="#main"
+             hx-push-url="/agent/daily_ai_brief?date={{ r.date }}"
+             class="block py-2.5 group">
+            <div class="flex items-baseline gap-3 mb-0.5">
+              <span class="font-mono text-[11px] text-zinc-600 w-20 shrink-0">{{ r.date }}</span>
+              {% if r.domain %}
+                <span class="text-[10px] text-saffron-600/80 uppercase tracking-wider">{{ r.domain }}</span>
+              {% endif %}
+              {% if r.confidence is not none %}
+                <span class="text-[10px] text-zinc-600 font-mono ml-auto">{{ r.confidence }}%</span>
+              {% endif %}
+            </div>
+            <div class="text-[13px] text-ivory group-hover:text-saffron-300 transition leading-snug">{{ r.title }}</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 py-4">No briefs yet.</p>
+    {% endif %}
+  </div>
+</div>

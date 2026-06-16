@@ -1,0 +1,35 @@
+<div>
+  <div class="mb-4">
+    <a href="/prompts" hx-get="/prompts" hx-target="#main" hx-push-url="/prompts" class="text-xs text-zinc-500 hover:text-zinc-300">← All prompts</a>
+  </div>
+
+  <div class="mb-5">
+    <div class="flex items-center gap-3 mb-1">
+      <h1 class="text-lg font-mono font-medium tracking-tight">{{ p.name }}</h1>
+      {% if source == 'langfuse' %}
+        <span class="text-[10px] uppercase tracking-widest text-emerald-400 border border-emerald-500/40 rounded-full px-2 py-0.5">langfuse</span>
+      {% else %}
+        <span class="text-[10px] uppercase tracking-widest text-zinc-500 border border-zinc-800 rounded-full px-2 py-0.5">code fallback</span>
+      {% endif %}
+    </div>
+    <p class="text-xs text-zinc-500">{{ p.description }}</p>
+    <div class="text-[10px] text-zinc-600 mt-1">agent: <span class="text-zinc-400">{{ p.agent }}</span> · variant: <span class="text-zinc-400">{{ p.variant }}</span> · {{ length }} chars</p>
+  </div>
+
+  <div class="flex items-center gap-3 mb-3">
+    <button
+      hx-post="/api/prompts/{{ p.name }}/push" hx-target="#push-feedback" hx-swap="innerHTML"
+      class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-medium px-3 py-1.5 rounded-lg transition">
+      {% if source == 'langfuse' %}Push new version to Langfuse{% else %}Push to Langfuse{% endif %}
+    </button>
+    <div id="push-feedback" class="text-xs text-zinc-500"></div>
+    <a href="https://cloud.langfuse.com/prompts" target="_blank" rel="noopener" class="text-xs text-zinc-500 hover:text-zinc-300 ml-auto">Edit in Langfuse →</a>
+  </div>
+
+  <pre class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 text-xs text-zinc-200 font-mono whitespace-pre-wrap break-words leading-relaxed max-h-[60vh] overflow-y-auto">{{ text }}</pre>
+
+  <div class="mt-4 text-[11px] text-zinc-500 leading-relaxed">
+    <span class="text-zinc-400">Editing workflow:</span>
+    push → edit in Langfuse → click "Save new version" → set label "production" → next agent run picks it up. The code fallback in <span class="font-mono text-zinc-400">agents/{{ p.agent }}/prompts.py</span> stays as your safety net.
+  </div>
+</div>

@@ -1,0 +1,126 @@
+{# Single-table view: # | Company · Title | Fit | Job URL | Tailored CV | Cold Note
+   Detail expands inline below when a row is clicked. #}
+<div class="space-y-4">
+
+  {# --- Compact run header --- #}
+  <div class="card p-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap text-[12px]">
+      <div class="text-zinc-300">
+        <span class="text-saffron-300 font-medium">{{ run.meta.target_role or '(any role)' }}</span>
+        {% if run.meta.location %} · {{ run.meta.location }}{% endif %}
+        {% if run.meta.region %} · <span class="font-mono text-zinc-500">{{ run.meta.region }}</span>{% endif %}
+        <span class="text-zinc-600 ml-2">{{ run.created_at }}</span>
+      </div>
+      <div class="text-[11px] text-zinc-500">
+        <span class="text-zinc-300">{{ run.meta.jobs_scraped or 0 }}</span> scraped ·
+        <span class="text-emerald-400">{{ run.meta.cvs_written or 0 }}</span> CVs
+      </div>
+    </div>
+  </div>
+
+  {# --- The table — the main thing the user wants to see --- #}
+  {% if top_jobs %}
+  <div class="card overflow-hidden">
+    <table class="w-full text-[12px]">
+      <thead>
+        <tr class="text-left text-zinc-500 bg-midnight-950 border-b border-midnight-800">
+          <th class="px-3 py-2 font-medium w-10">#</th>
+          <th class="px-3 py-2 font-medium">Company · Title</th>
+          <th class="px-3 py-2 font-medium text-right w-16">Fit</th>
+          <th class="px-3 py-2 font-medium w-24">Job URL</th>
+          <th class="px-3 py-2 font-medium w-24">Tailored CV</th>
+          <th class="px-3 py-2 font-medium w-24">Cold Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for j in top_jobs %}
+        <tr class="border-b border-midnight-900 hover:bg-midnight-900/50 transition {% if j.slug == selected_slug %}bg-saffron-500/5{% endif %}">
+          <td class="px-3 py-2.5 text-zinc-600 font-mono">{{ loop.index }}</td>
+          <td class="px-3 py-2.5 {% if j.slug == selected_slug %}text-saffron-300{% else %}text-zinc-200{% endif %}">{{ j.header }}</td>
+          <td class="px-3 py-2.5 text-right">
+            <span class="inline-block font-mono text-[11px] px-1.5 py-0.5 rounded
+              {% if j.fit >= 75 %}bg-emerald-500/15 text-emerald-300
+              {% elif j.fit >= 55 %}bg-saffron-500/15 text-saffron-300
+              {% else %}bg-zinc-700/30 text-zinc-400{% endif %}">{{ j.fit }}</span>
+          </td>
+          <td class="px-3 py-2.5">
+            {% if j.link %}
+              <a href="{{ j.link }}" target="_blank" rel="noopener"
+                 class="text-saffron-400 hover:text-saffron-300 underline-offset-2 hover:underline">open ↗</a>
+            {% else %}
+              <span class="text-zinc-700">—</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2.5">
+            <button hx-get="/api/agent/job_hunter/latest?slug={{ j.slug }}&view=cv"
+                    hx-target="#job-hunter-latest" hx-swap="innerHTML"
+                    class="text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline">view</button>
+          </td>
+          <td class="px-3 py-2.5">
+            {% if j.cold_note %}
+              <button hx-get="/api/agent/job_hunter/latest?slug={{ j.slug }}&view=note"
+                      hx-target="#job-hunter-latest" hx-swap="innerHTML"
+                      class="text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline">view</button>
+            {% else %}
+              <span class="text-zinc-700">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# --- Inline detail panel: tailored CV on top, cold note below.
+       Visible whenever a slug is selected (defaults to top-ranked). --- #}
+  {% if selected_files and not selected_files._error %}
+  <div class="card p-5 space-y-5">
+    <div class="flex items-baseline justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-1">Showing</div>
+        <div class="text-lg text-ivory">{{ selected_slug }}</div>
+      </div>
+      {% if selected_files.job_url %}
+        <a href="{{ selected_files.job_url }}" target="_blank" rel="noopener"
+           class="text-[11px] px-2.5 py-1 rounded bg-saffron-500/15 text-saffron-300 hover:bg-saffron-500/25 transition">open job posting ↗</a>
+      {% endif %}
+    </div>
+
+    {# Tailored CV — primary --- #}
+    {% if selected_files.tailored_cv_html %}
+    <div>
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Tailored CV</div>
+      <div class="prose prose-invert prose-sm max-w-none text-zinc-300 leading-relaxed border-l-2 border-saffron-500/30 pl-4">{{ selected_files.tailored_cv_html|safe }}</div>
+    </div>
+    {% endif %}
+
+    {# Cold note — primary --- #}
+    {% if selected_files.cold_note_html %}
+    <div>
+      <div class="flex items-baseline justify-between mb-2">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Cold note to hiring manager</div>
+        <button onclick="navigator.clipboard.writeText(this.dataset.text); this.textContent='copied ✓'"
+                data-text="{{ selected_files.cold_note_md|e }}"
+                class="text-[10px] px-2 py-0.5 rounded border border-midnight-700 text-zinc-400 hover:border-saffron-500/40 hover:text-saffron-300">copy</button>
+      </div>
+      <div class="prose prose-invert prose-sm max-w-none text-zinc-300 leading-relaxed border-l-2 border-emerald-500/30 pl-4">{{ selected_files.cold_note_html|safe }}</div>
+    </div>
+    {% endif %}
+
+    {# ATS keywords as small chip strip — useful but de-emphasized --- #}
+    {% if selected_files.ats_keywords %}
+    <div>
+      <div class="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Relevant keywords for your profile</div>
+      <div class="flex flex-wrap gap-1.5">
+        {% for kw in selected_files.ats_keywords %}
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-midnight-950 border border-midnight-800 text-zinc-400">{{ kw }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% elif selected_files and selected_files._error %}
+    <div class="card p-5 text-[12px] text-rose-400">Couldn't load job: {{ selected_files._error }}</div>
+  {% endif %}
+</div>

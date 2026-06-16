@@ -1,0 +1,41 @@
+{# Inner body for a single daily brief. Used both directly (page load) and via HTMX swap. #}
+{% if not selected %}
+  <div class="text-zinc-500 text-sm py-12 text-center">
+    <div class="display-serif text-saffron-600/60 text-lg mb-2">Pick a date from the archive</div>
+    <div class="text-xs text-zinc-600">Each brief is one curated story from the AI world — fresh take every day at ~03:40 UTC.</div>
+  </div>
+{% elif selected.error %}
+  <div class="text-sindoor-300 text-sm">Couldn't load: {{ selected.error }}</div>
+{% else %}
+  {% set m = selected.meta %}
+  <!-- Frontmatter as header card -->
+  <div class="mb-5 pb-5 border-b border-midnight-800">
+    <div class="flex flex-wrap items-baseline gap-3 mb-3">
+      <span class="font-mono text-[11px] text-saffron-500">{{ m.date or selected.date }}</span>
+      {% if m.domain %}
+        <span class="pill pill-roadmap text-[9px] py-0">{{ m.domain }}</span>
+      {% endif %}
+      {% if m.confidence is defined %}
+        <span class="text-[10px] text-zinc-500">confidence {{ m.confidence }}%</span>
+      {% endif %}
+      {% if selected.html_url %}
+        <a href="{{ selected.html_url }}" target="_blank" rel="noopener" class="ml-auto text-[11px] text-zinc-500 hover:text-saffron-400">github →</a>
+      {% endif %}
+    </div>
+    {% if m.title %}
+      <h2 class="display-serif text-2xl text-ivory leading-tight">{{ m.title }}</h2>
+    {% endif %}
+    {% if m.tags %}
+      <div class="flex flex-wrap gap-1.5 mt-3">
+        {% for t in m.tags %}
+          <span class="text-[10px] text-saffron-600/70 bg-midnight-900/60 border border-midnight-800 rounded px-2 py-0.5 font-mono">#{{ t }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Rendered markdown body -->
+  <article class="brief-prose">
+    {{ selected.body_html|safe }}
+  </article>
+{% endif %}

@@ -1,0 +1,178 @@
+{% from '_astra_icons.html' import astra_icon %}
+<div>
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <h1 class="display-serif page-title text-3xl text-ivory">Templates</h1>
+      <p class="text-xs text-zinc-500 mt-2">The auto-send template library. Active templates publish to Langfuse — n8n picks one at random per incoming comment. Operator vets once; the system rotates forever.</p>
+    </div>
+    <a href="/agent/template_generator"
+       hx-get="/agent/template_generator" hx-target="#main" hx-push-url="/agent/template_generator"
+       class="text-saffron-400 hover:text-saffron-300 text-xs flex items-center gap-1.5">
+      <span class="text-saffron-500">{{ astra_icon('mantra', class='w-4 h-4') }}</span>
+      Generate new batch →
+    </a>
+  </div>
+
+  <!-- Quick-add form: paste your own template without running the generator agent (zero cost) -->
+  <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl p-4 mb-6">
+    <details>
+      <summary class="cursor-pointer text-sm text-saffron-400 hover:text-saffron-300 select-none">
+        + Add template manually <span class="text-xs text-zinc-500 ml-2">(zero cost — skip the generator agent)</span>
+      </summary>
+      <form hx-post="/api/templates/add" hx-target="#add-feedback" hx-swap="innerHTML" hx-on::after-request="if(event.detail.xhr.status===200){this.reset();htmx.ajax('GET','/templates',{target:'#main',swap:'innerHTML'})}" class="mt-4 space-y-3">
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">Category</label>
+            <select name="category" class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+              <option value="qualified_request">qualified_request</option>
+              <option value="tangential_question">tangential_question</option>
+              <option value="pure_praise">pure_praise</option>
+              <option value="partnership_inquiry">partnership_inquiry</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">Niche</label>
+            <select name="niche" class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+              {% for key, n in niches.items() %}<option value="{{ key }}">{{ n.label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-400 mb-1">Kind</label>
+            <select name="kind" class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+              <option value="public_reply">public_reply</option>
+              <option value="dm">dm</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-zinc-400 mb-1">Template body
+            <span class="text-zinc-600 ml-1">— use {{ '{' }}handle{{ '}' }} for commenter's username and {{ '{' }}payload{{ '}' }} for the link/offer</span>
+          </label>
+          <textarea name="body" rows="3" required placeholder='e.g. "Just slid into your DMs 💌"  OR  "Here you go: {{ "{" }}payload{{ "}" }}. Curious which one comes up for you?"'
+            class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50"></textarea>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <label class="text-xs text-zinc-400 flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="activate_immediately" value="true" checked class="accent-saffron-500">
+            Activate immediately (publish to Langfuse)
+          </label>
+          <div class="flex items-center gap-3">
+            <div id="add-feedback" class="text-xs text-zinc-500"></div>
+            <button class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-sm font-medium px-4 py-2 rounded-lg transition">Add template</button>
+          </div>
+        </div>
+        <div class="text-[10px] text-zinc-600 leading-relaxed pt-1">
+          Tip: enter 10–15 distinct variants per (category, niche, kind) so the workflow's anti-repeat
+          rotation has room to vary. Each Add creates one row; submit the form once per variant.
+        </div>
+      </form>
+    </details>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Active</div>
+      <div class="display-serif text-2xl mt-1 text-saffron-300">{{ counts.get('active', 0) }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">rotating in n8n</div>
+    </div>
+    <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Draft (review)</div>
+      <div class="display-serif text-2xl mt-1 {% if counts.get('draft', 0) %}text-ivory{% else %}text-zinc-500{% endif %}">{{ counts.get('draft', 0) }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">awaiting your approval</div>
+    </div>
+    <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Deactivated</div>
+      <div class="display-serif text-2xl mt-1 text-zinc-400">{{ counts.get('inactive', 0) }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">kept as history</div>
+    </div>
+    <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Total</div>
+      <div class="display-serif text-2xl mt-1 text-zinc-300">{{ counts.values()|sum }}</div>
+    </div>
+  </div>
+
+  {% if not groups %}
+    <div class="bg-midnight-900/40 border border-midnight-800 border-dashed rounded-xl p-8 text-center">
+      <div class="text-sm text-zinc-400">No templates yet.</div>
+      <div class="text-xs text-zinc-600 mt-1">
+        Generate your first batch via
+        <a href="/agent/template_generator" hx-get="/agent/template_generator" hx-target="#main" hx-push-url="/agent/template_generator" class="text-saffron-400 hover:text-saffron-300">/agent/template_generator</a>.
+      </div>
+    </div>
+  {% else %}
+    {% for (cat, niche, kind), items in groups.items() %}
+      {% set kind_badge =
+        'bg-saffron-500/15 text-saffron-300 border-saffron-600/30' if kind == 'public_reply' else
+        'bg-emerald-500/15 text-emerald-300 border-emerald-600/30' %}
+      <section class="mb-7">
+        <div class="flex items-baseline gap-3 mb-3">
+          <h2 class="display-serif text-lg text-ivory">{{ cat.replace('_', ' ') }}</h2>
+          <span class="text-xs text-zinc-500">× {{ niches.get(niche).label if niches.get(niche) else niche }}</span>
+          <span class="text-[10px] uppercase tracking-widest border rounded-full px-2 py-0.5 {{ kind_badge }}">{{ kind }}</span>
+          <span class="text-[10px] text-zinc-600 ml-auto">
+            {% set active_n = items | selectattr('status', 'equalto', 'active') | list | length %}
+            {{ active_n }} active · {{ items|length }} total
+          </span>
+        </div>
+        <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl divide-y divide-midnight-800">
+          {% for t in items %}
+            {% set status_color =
+              'text-saffron-300'  if t.status == 'active' else
+              'text-ivory'        if t.status == 'draft'  else
+              'text-zinc-500' %}
+            {% set status_dot =
+              'bg-saffron-400' if t.status == 'active' else
+              'bg-zinc-500'    if t.status == 'draft'  else
+              'bg-midnight-700' %}
+            <div id="tpl-{{ t.id }}" class="px-4 py-3 hover:bg-midnight-850/40 transition">
+              <div class="flex items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 mb-1.5 text-[10px]">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full {{ status_dot }}"></span>
+                    <span class="uppercase tracking-widest {{ status_color }}">{{ t.status }}</span>
+                    <span class="text-zinc-700 ml-auto font-mono">#{{ t.id }}</span>
+                  </div>
+                  <div class="text-sm {% if t.status == 'inactive' %}text-zinc-500{% else %}text-ivory{% endif %} leading-relaxed">{{ t.body }}</div>
+                  {% if t.voice_note %}
+                    <div class="text-[11px] text-zinc-500 italic mt-1.5">— {{ t.voice_note }}</div>
+                  {% endif %}
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-1">
+                  {% if t.status == 'draft' or t.status == 'inactive' %}
+                    <button
+                      hx-post="/api/templates/{{ t.id }}/activate"
+                      hx-target="#tpl-{{ t.id }}-action" hx-swap="innerHTML"
+                      class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-xs font-medium px-3 py-1 rounded transition">Activate</button>
+                  {% elif t.status == 'active' %}
+                    <button
+                      hx-post="/api/templates/{{ t.id }}/deactivate"
+                      hx-target="#tpl-{{ t.id }}-action" hx-swap="innerHTML"
+                      class="border border-zinc-700 hover:border-zinc-500 text-zinc-300 text-xs px-3 py-1 rounded transition">Deactivate</button>
+                  {% endif %}
+                  <button
+                    hx-post="/api/templates/{{ t.id }}/delete"
+                    hx-target="#tpl-{{ t.id }}-action" hx-swap="innerHTML"
+                    hx-confirm="Delete this template? Cannot be undone."
+                    class="text-zinc-500 hover:text-sindoor-400 text-[10px] transition">delete</button>
+                  <div id="tpl-{{ t.id }}-action"></div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  {% endif %}
+
+  <div class="mt-8 bg-midnight-900/40 border border-midnight-800 rounded-xl p-4">
+    <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-1.5">How activation works</div>
+    <p class="text-xs text-zinc-400 leading-relaxed">
+      Click <span class="text-saffron-400">Activate</span> on a template → it joins the active rotation for that (category, niche, kind).
+      Indra immediately publishes a JSON array of all active templates for that combo to Langfuse
+      under <span class="font-mono text-saffron-600/80">auto_send.&lt;category&gt;.&lt;niche&gt;.&lt;kind&gt;</span>.
+      n8n's auto-responder fetches that prompt at send time and picks one variant at random.
+      Deactivate or delete: the active set is recomputed and Langfuse is updated within the same call.
+    </p>
+  </div>
+</div>

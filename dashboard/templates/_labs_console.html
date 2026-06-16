@@ -1,0 +1,127 @@
+{# Labs assessment results emailer console.
+   Lives on the /overview page, sourced from Resend's list-emails API.
+   Zero persistence on the Indra side — Resend has the data, we just surface it. #}
+{% set L = labs %}
+
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if L.error %}
+          <span class="pill pill-roadmap">{{ L.error[:36] }}</span>
+        {% elif L.configured %}
+          <span class="pill pill-roadmap" title="Built locally; webhook is on 127.0.0.1 so the labs site can't reach it">
+            <span class="w-1.5 h-1.5 rounded-full bg-saffron-400"></span>STAGED · NOT DEPLOYED
+          </span>
+        {% else %}
+          <span class="pill pill-roadmap">not configured</span>
+        {% endif %}
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">runtime · vercel + resend (planned)</span>
+        {% if L.configured %}
+          {% if L.domain_verified %}
+            <span class="text-[10px] text-emerald-400 font-mono">domain ✓ {{ L.domain_name }}</span>
+          {% else %}
+            <span class="text-[10px] text-sindoor-400 font-mono">domain unverified — {{ L.domain_name }}</span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">Lab assessment results</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">
+        Sends a per-test results email when a visitor completes an assessment at <span class="text-saffron-300 font-mono">manikumarjami.com/labs</span>. Zero-storage: data is processed in transit only. This panel reads live from Resend.
+      </p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0">
+      <a href="/agent/labs_results_emailer" hx-get="/agent/labs_results_emailer" hx-target="#main" hx-push-url="/agent/labs_results_emailer"
+         class="text-xs text-saffron-400 hover:text-saffron-300 transition">Open agent →</a>
+      {% if L.last_send_ts %}
+        <span class="text-[11px] text-zinc-600 font-mono">last: {{ L.last_send_ts[11:19] }} UTC</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Today</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ L.today_count }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">results emails sent</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Last 7 days</div>
+      <div class="stat-num display-serif text-2xl text-emerald-400 mt-1">{{ L.week_count }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">sends this week</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Visible total</div>
+      <div class="stat-num display-serif text-2xl text-saffron-300 mt-1">{{ L.total_visible }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">last 100 in Resend</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Distinct tests</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ L.by_test|length }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">{% if L.by_test %}{{ L.by_test|list|join(', ')|truncate(30, true, '…') }}{% else %}no sends yet{% endif %}</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+  <!-- Delivery status breakdown -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Delivery status</h2>
+      <span class="text-[10px] text-zinc-600">{{ L.by_status|length }} kinds</span>
+    </div>
+    {% if L.by_status %}
+      <div class="space-y-2.5">
+        {% set max_status = (L.by_status.values()|max) %}
+        {% for status, n in (L.by_status.items()|list|sort(attribute=1, reverse=true)) %}
+          {% set tint = '#34d399' if status in ('delivered','sent') else ('#f06b5e' if status in ('bounced','complained','failed','delivery_delayed') else '#f4c542') %}
+          <div>
+            <div class="flex items-baseline justify-between mb-1">
+              <span class="text-[12px] text-ivory">{{ status }}</span>
+              <span class="text-[11px] text-zinc-500 font-mono">{{ n }}</span>
+            </div>
+            <div class="h-1.5 bg-midnight-900 rounded overflow-hidden">
+              <div class="h-full rounded" style="width: {{ ((n / max_status) * 100)|round(0)|int if max_status else 0 }}%; background: {{ tint }}"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600">No sends in the visible window.</p>
+    {% endif %}
+    {% if L.error %}
+      <p class="text-[11px] text-sindoor-400 mt-4 italic">Resend error: {{ L.error }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Recent sends -->
+  <div class="card p-5 lg:col-span-3">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Recent sends</h2>
+      <span class="text-[10px] text-zinc-600">last {{ L.recent|length }}</span>
+    </div>
+    {% if L.recent %}
+      <!-- Header -->
+      <div class="grid grid-cols-[1fr_140px_110px_80px] gap-2 pb-2 border-b border-midnight-800 mb-1">
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Email</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Test</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Date (IST)</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600 text-right">Status</span>
+      </div>
+      <div class="divide-y divide-midnight-800">
+        {% for r in L.recent %}
+          {% set status_color = 'text-emerald-400' if r.status in ('delivered','sent') else ('text-sindoor-400' if r.status in ('bounced','complained','failed') else 'text-saffron-300') %}
+          <div class="grid grid-cols-[1fr_140px_110px_80px] gap-2 items-center py-2">
+            <span class="font-mono text-[12px] text-ivory truncate">{{ r.email }}</span>
+            <span class="text-[11px] text-saffron-300 truncate">{{ r.test_label }}</span>
+            <span class="text-[11px] text-zinc-500">{{ r.ts }}</span>
+            <span class="text-[10px] {{ status_color }} font-mono uppercase tracking-wider text-right">{{ r.status }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 py-4">No recent sends. When someone completes an assessment on manikumarjami.com/labs and enters their email, it shows up here.</p>
+    {% endif %}
+  </div>
+</div>

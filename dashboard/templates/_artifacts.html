@@ -1,0 +1,13 @@
+<div>
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Artifacts</h1>
+    <p class="text-xs text-zinc-500 mt-1">Everything every agent has produced. Click "view" to read.</p>
+  </div>
+
+  <div
+    hx-get="/api/artifacts/partial?limit=100"
+    hx-trigger="load"
+    hx-swap="innerHTML">
+    <div class="text-zinc-500 text-sm">Loading…</div>
+  </div>
+</div>

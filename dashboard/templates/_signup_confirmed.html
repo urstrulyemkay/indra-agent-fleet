@@ -1,0 +1,28 @@
+{# Confirmation landing page hit when a recipient clicks the DOI link. #}
+<div class="max-w-lg">
+  {% if row %}
+    <div class="card p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="pill pill-live"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live"></span>Confirmed</span>
+        <span class="text-[10px] text-zinc-600 font-mono">id #{{ row.id }}</span>
+      </div>
+      <h1 class="display-serif page-title text-3xl text-ivory">You're in</h1>
+      <p class="text-sm text-zinc-400 mt-3">
+        We've confirmed <span class="text-saffron-300 font-mono">{{ row.email }}</span>. You won't get another email unless we send something you signed up for.
+      </p>
+      <div class="mt-5 text-[11px] text-zinc-600 font-mono space-y-0.5">
+        <div>created:   {{ row.created_at }}</div>
+        <div>confirmed: {{ row.confirmed_at }}</div>
+        {% if row.source %}<div>source:    {{ row.source }}</div>{% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card p-6">
+      <span class="pill pill-roadmap">invalid token</span>
+      <h1 class="display-serif page-title text-3xl text-ivory mt-2">Link not recognized</h1>
+      <p class="text-sm text-zinc-400 mt-3">
+        This confirmation link doesn't match a pending signup. It may have been mistyped, expired, or already used in a different flow. Try submitting the form again.
+      </p>
+    </div>
+  {% endif %}
+</div>

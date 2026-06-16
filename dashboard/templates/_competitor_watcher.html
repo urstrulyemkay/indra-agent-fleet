@@ -1,0 +1,35 @@
+<div class="card p-5">
+  <div class="flex items-center justify-between mb-4">
+    <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Creator benchmark</div>
+    {% if has_dashboard %}
+      <a href="/competitor-dashboard" target="_blank" rel="noopener"
+         class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-sm font-medium px-4 py-2 rounded-lg transition">
+        Open visual dashboard ↗
+      </a>
+    {% endif %}
+  </div>
+
+  {% if personas %}
+    <div class="mb-4">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Persona files</div>
+      <ul class="text-[12px] text-zinc-400 space-y-1 leading-relaxed">
+        {% for p in personas %}
+          <li><span class="font-mono text-saffron-300">outputs/instagram_scraper/personas/{{ p }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if comparison %}
+    <details open>
+      <summary class="text-[12px] text-saffron-400 cursor-pointer hover:underline">Cross-creator comparison (creator_comparison.md)</summary>
+      <pre class="mt-3 text-[11px] text-zinc-300 whitespace-pre-wrap leading-relaxed bg-midnight-950 border border-midnight-800 rounded-lg p-4 max-h-[520px] overflow-y-auto">{{ comparison }}</pre>
+    </details>
+  {% else %}
+    <div class="text-[12px] text-zinc-500">No creator_comparison.md found under {{ dir }}.</div>
+  {% endif %}
+
+  <div class="text-[11px] text-zinc-600 mt-3">
+    Source dir: <span class="font-mono text-zinc-500">{{ dir }}</span> · static output, not a live run.
+  </div>
+</div>

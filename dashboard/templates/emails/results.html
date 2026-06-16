@@ -1,0 +1,121 @@
+{# Email body for a /labs/ assessment result delivery. ~200 words per test.
+   Variables:
+     test_id, test_label, greeting, summary_text, results_url,
+     newsletter_opt_in (bool), unsubscribe_url (only if opt-in),
+     wellbeing_disclaimer (bool, true for PHQ-9/GAD-7)
+   Per-test interpretive copy is selected via Jinja conditional blocks
+   keyed on test_id. No emdashes anywhere (labs CLAUDE.md hard rule).
+#}<!doctype html>
+<html><body style="font-family: -apple-system, system-ui, sans-serif; max-width: 580px; margin: 24px auto; color: #222; line-height: 1.55;">
+
+  <h2 style="margin: 0 0 6px 0;">{{ greeting }}</h2>
+  <p style="color: #555; margin: 0 0 18px 0;">Your <b>{{ test_label }}</b> results are ready.</p>
+
+  {% if wellbeing_disclaimer %}
+    <div style="background: #fff7ed; border-left: 3px solid #f59e0b; padding: 12px 14px; margin: 0 0 18px 0; font-size: 13px; color: #78350f; line-height: 1.5;">
+      <b>Important.</b> PHQ-9 and GAD-7 are screening tools, not clinical diagnoses. Your scores reflect symptom frequency over the last two weeks, not who you are. If symptoms persist, or if any item about self-harm felt true, please reach out today.
+      <br><br>
+      <b>India helplines (free, confidential, 24/7):</b><br>
+      KIRAN 1800-599-0019 · Vandrevala 1860-2662-345 · iCall +91-9152987821
+    </div>
+  {% endif %}
+
+  <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 16px 18px; margin: 0 0 22px 0;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #7c3aed; margin-bottom: 8px;">Your snapshot</div>
+    <div style="font-size: 14px; color: #1f2937; line-height: 1.7; white-space: pre-line; word-break: break-word;">{{ summary_text }}</div>
+  </div>
+
+  {# ─────────────── Per-test interpretive copy ─────────────── #}
+
+  {% if test_id == "big-five" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> The Big Five is the most widely studied personality framework in psychology. Each of the five traits sits on a spectrum, and your standout signal is the one furthest from average. That's the trait shaping the most of your daily rhythm, even when you're not aware of it.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Your archetype name and a one-paragraph profile of how this combination of traits typically shows up</li>
+      <li style="margin-bottom: 6px;">A per-trait breakdown with the high-side and low-side gifts (no trait is "bad")</li>
+      <li style="margin-bottom: 6px;">Three modes your archetype runs in: at work, in relationships, in decisions under pressure</li>
+      <li style="margin-bottom: 6px;">One specific experiment to try this week based on your strongest trait</li>
+    </ul>
+
+  {% elif test_id == "attachment-style" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> Attachment style is the template you learned for closeness in your earliest relationships. The two axes are anxiety (how often you worry about being abandoned) and avoidance (how often you pull away when intimacy increases). Where you sit on those axes puts you into one of four styles. It's a pattern, not a verdict.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Your dominant style with the specific behaviors it produces in adult relationships</li>
+      <li style="margin-bottom: 6px;">Your default move when conflict shows up, and what it costs you</li>
+      <li style="margin-bottom: 6px;">One growth direction toward earned-secure attachment, with a concrete first step</li>
+      <li style="margin-bottom: 6px;">A short "what to do when" guide for the recurring patterns of your style</li>
+    </ul>
+
+  {% elif test_id == "career-interest" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> Holland Code (RIASEC) describes the work environments and tasks that naturally pull you in. It's not a verdict on what you should do for a living. It's a description of your gravity, useful for noticing whether your current role matches the way your attention actually wants to move.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Your top three interest codes and what they typically combine into</li>
+      <li style="margin-bottom: 6px;">Sample career clusters and role descriptions that match your three-letter code</li>
+      <li style="margin-bottom: 6px;">One adjacent code worth exploring if you want to stretch beyond your default</li>
+      <li style="margin-bottom: 6px;">A reflection prompt for whether your current role matches your code, and what to do if not</li>
+    </ul>
+
+  {% elif test_id == "cognitive" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> Cognitive Snapshot uses ICAR-style items to map where your reasoning is sharpest right now. Cognitive abilities are levers that can be trained. Lower sub-scores are not verdicts; they're starting points. A higher score on one lever often comes at the cost of another, which the full report breaks down.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Your strongest sub-domain and what it predicts in real-world reasoning</li>
+      <li style="margin-bottom: 6px;">Your softer sub-domain and one targeted drill that sharpens it</li>
+      <li style="margin-bottom: 6px;">How your overall pattern compares to a typical adult sample</li>
+      <li style="margin-bottom: 6px;">A note on cognitive flexibility, because no single snapshot tells the whole story</li>
+    </ul>
+
+  {% elif test_id == "student-stress" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> PSS-10 asks how often life recently felt unpredictable, uncontrollable, or overwhelming. The domain breakdown then tells you where the load is actually sitting. Stress lives in patterns, so the goal of the full report is to make those patterns concrete enough to do something about.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Your stress band and what it typically implies for the next two weeks</li>
+      <li style="margin-bottom: 6px;">Your top stress domain (academic, family, social, or self), with a five-minute reframe to try</li>
+      <li style="margin-bottom: 6px;">The pattern across all four life domains, so you see what's loaded and what's quiet</li>
+      <li style="margin-bottom: 6px;">When self-help stops being enough, and what reaching out looks like</li>
+    </ul>
+
+  {% elif test_id == "wellbeing" %}
+    <p style="margin: 0 0 12px 0;"><b>What this measures.</b> The PHQ-9 and GAD-7 ask about specific symptoms over the past two weeks. They are signals, not labels. The bands in your snapshot are clinically used cutoffs, but only you and a professional can decide what they actually mean for your life. The full report walks through your scores symptom by symptom so the picture is concrete.</p>
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b></p>
+    <ul style="margin: 0 0 18px 18px; padding: 0; color: #333;">
+      <li style="margin-bottom: 6px;">Item-level breakdown of which symptoms drove your scores</li>
+      <li style="margin-bottom: 6px;">What "mild", "moderate", "moderately severe", or "severe" actually means in practice</li>
+      <li style="margin-bottom: 6px;">When a screening result is worth taking to a licensed mental-health professional</li>
+      <li style="margin-bottom: 6px;">Helplines and next steps, kept at the top of this email for easy access</li>
+    </ul>
+
+  {% else %}
+    <p style="margin: 0 0 12px 0;"><b>What's inside the full report:</b> a deeper breakdown of every dimension scored, contextual interpretation of your standout signal, and where to go next if you want to dig further.</p>
+  {% endif %}
+
+  <p style="margin: 0 0 24px 0;">
+    <a href="{{ results_url }}"
+       style="background:#7c3aed;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">
+      View your full report
+    </a>
+  </p>
+
+  <p style="font-size:12px;color:#666;margin: 0 0 4px 0;">Bookmark or share this link. It's unique to your result:</p>
+  <p style="font-size:11px;color:#888;font-family:ui-monospace,SFMono-Regular,monospace;word-break:break-all;margin: 0 0 24px 0;">
+    {{ results_url }}
+  </p>
+
+  {% if newsletter_opt_in %}
+    <hr style="border:none;border-top:1px solid #eee;margin: 20px 0;">
+    <p style="font-size:12px;color:#666;margin: 0 0 4px 0;">
+      <b>You are also subscribed to Thought Mechanic.</b> Applied psychology + cognitive science from Mani. No spam, no sales pitches.
+    </p>
+    <p style="font-size:11px;color:#888;margin: 0;">
+      Change your mind anytime: <a href="{{ unsubscribe_url }}" style="color:#7c3aed;">unsubscribe</a>.
+    </p>
+  {% endif %}
+
+  <hr style="border:none;border-top:1px solid #eee;margin: 28px 0 12px 0;">
+  <p style="font-size:11px;color:#999;margin: 0;">
+    Sent because you completed an assessment at manikumarjami.com/labs. This is a one-time results delivery.
+    {% if not newsletter_opt_in %}If you didn't request this, ignore it. No further emails will arrive.{% endif %}
+  </p>
+</body></html>

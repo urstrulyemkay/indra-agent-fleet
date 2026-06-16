@@ -1,0 +1,208 @@
+{% from '_astra_icons.html' import astra_icon %}
+{% set entry = state.entry %}
+{% set ts = tm_stats %}
+<div>
+  <!-- Header -->
+  <div class="flex items-start gap-4 mb-6">
+    <div class="text-saffron-400 shrink-0 mt-1">
+      {{ astra_icon('chakra', class='w-9 h-9') }}
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="pill pill-live"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live"></span>LIVE</span>
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">runtime · cloud routines → github</span>
+        <span class="text-[10px] text-saffron-300 font-mono">@thoughtmechanic</span>
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">{{ entry.label }}</h1>
+      <p class="text-sm text-zinc-400 max-w-3xl mt-3 leading-relaxed">{{ entry.description }}</p>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Reels planned</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ ts.total }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">in archive</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Streak</div>
+      <div class="stat-num display-serif text-2xl text-emerald-400 mt-1">{{ ts.streak_days }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">consecutive days</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Avg virality</div>
+      <div class="stat-num display-serif text-2xl text-saffron-300 mt-1">
+        {% if ts.avg_virality is not none %}{{ ts.avg_virality }}<span class="text-base text-zinc-500">/100</span>{% else %}—{% endif %}
+      </div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">hook strength</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider text-saffron-600/80">Pillars</div>
+      <div class="stat-num display-serif text-2xl text-ivory mt-1">{{ ts.pillars|length }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">content domains</div>
+    </div>
+  </div>
+
+  {% if listing.error %}
+    <div class="card p-5 mb-4 border-sindoor-500/30">
+      <div class="text-xs text-sindoor-300">Couldn't load briefs from GitHub: {{ listing.error }}</div>
+    </div>
+  {% endif %}
+
+  <!-- Heatmap -->
+  <div class="card p-5 mb-6">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Publishing rhythm — last 90 days</h2>
+      <div class="flex items-center gap-2 text-[10px] text-zinc-600">
+        <span>fewer</span>
+        <span class="w-2.5 h-2.5 rounded-sm bg-midnight-800 border border-midnight-700"></span>
+        <span class="w-2.5 h-2.5 rounded-sm" style="background: rgba(212,160,23,0.4);"></span>
+        <span class="w-2.5 h-2.5 rounded-sm" style="background: rgba(52,211,153,0.85);"></span>
+        <span>published</span>
+      </div>
+    </div>
+    <div class="heatmap-grid">
+      {% for week in heatmap_weeks %}
+        <div class="heatmap-col">
+          {% for day in week %}
+            {% if day.present is none %}
+              <div class="heatmap-cell heatmap-empty"></div>
+            {% elif day.present %}
+              <a href="/agent/thought_mechanic?date={{ day.date }}"
+                 hx-get="/agent/thought_mechanic?date={{ day.date }}"
+                 hx-target="#main"
+                 hx-push-url="/agent/thought_mechanic?date={{ day.date }}"
+                 class="heatmap-cell heatmap-present {% if day.is_today %}heatmap-today{% endif %} {% if selected_date == day.date %}heatmap-selected{% endif %}"
+                 title="{{ day.label }} — published"></a>
+            {% else %}
+              <div class="heatmap-cell heatmap-absent" title="{{ day.label }} — no reel"></div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Playbook (collapsed) -->
+  {% if playbook and not playbook.error %}
+    <details class="card p-5 mb-6 group">
+      <summary class="cursor-pointer flex items-baseline justify-between">
+        <div>
+          <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Brand playbook</h2>
+          <div class="text-[13px] text-ivory mt-1">PLAYBOOK.md — static brand voice + content pillars + research source roster</div>
+        </div>
+        <div class="flex items-center gap-3">
+          {% if playbook.html_url %}<a href="{{ playbook.html_url }}" target="_blank" rel="noopener" class="text-[11px] text-zinc-500 hover:text-saffron-400">github →</a>{% endif %}
+          <svg class="w-4 h-4 transition-transform group-open:rotate-90 text-zinc-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </summary>
+      <article class="brief-prose mt-5 pt-5 border-t border-midnight-800">
+        {{ playbook.body_html|safe }}
+      </article>
+    </details>
+  {% endif %}
+
+  <!-- Two-column: archive + reader -->
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    <div class="card p-4 lg:col-span-2 max-h-[calc(100vh-280px)] overflow-y-auto">
+      <div class="flex items-baseline justify-between mb-3 sticky top-0 bg-midnight-900/95 backdrop-blur py-1 z-10">
+        <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Reel archive</h2>
+        <span class="text-[10px] text-zinc-600">{{ archive|length }} reels</span>
+      </div>
+      <div class="space-y-2">
+        {% for a in archive %}
+          <a href="/agent/thought_mechanic?date={{ a.date }}"
+             hx-get="/agent/thought_mechanic?date={{ a.date }}"
+             hx-target="#main"
+             hx-push-url="/agent/thought_mechanic?date={{ a.date }}"
+             class="brief-archive-card block px-3 py-2.5 rounded-md transition {% if selected_date == a.date %}brief-archive-active{% endif %}">
+            <div class="flex items-baseline gap-2 mb-1">
+              <span class="font-mono text-[10px] text-zinc-500">{{ a.date }}</span>
+              {% if a.virality is not none %}
+                <span class="ml-auto text-[10px] text-emerald-400 font-mono">{{ a.virality }}/100</span>
+              {% endif %}
+            </div>
+            <div class="text-[12.5px] text-ivory leading-snug line-clamp-2 mb-1">{{ a.title }}</div>
+            {% if a.pillar %}
+              <div class="text-[10px] text-saffron-600/80 uppercase tracking-wider truncate">{{ a.pillar }}</div>
+            {% endif %}
+            {% if a.tags %}
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                {% for t in a.tags[:3] %}<span class="text-[9px] text-zinc-600 font-mono">#{{ t }}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </a>
+        {% endfor %}
+        {% if not archive %}
+          <div class="text-xs text-zinc-600 italic">No reels yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div id="brief-body" class="card p-6 lg:col-span-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+      {% if not selected %}
+        <div class="text-zinc-500 text-sm py-12 text-center">
+          <div class="display-serif text-saffron-600/60 text-lg mb-2">Pick a reel from the archive</div>
+        </div>
+      {% elif selected.error %}
+        <div class="text-sindoor-300 text-sm">Couldn't load: {{ selected.error }}</div>
+      {% else %}
+        {% set m = selected.meta %}
+        <div class="mb-5 pb-5 border-b border-midnight-800">
+          <div class="flex flex-wrap items-baseline gap-3 mb-3">
+            <span class="font-mono text-[11px] text-saffron-500">{{ m.date or selected.date }}</span>
+            {% if m.handle %}<span class="text-[11px] text-zinc-500 font-mono">{{ m.handle }}</span>{% endif %}
+            {% if m.content_pillar %}<span class="pill pill-roadmap text-[9px] py-0">{{ m.content_pillar }}</span>{% endif %}
+            {% if m.virality_score is defined and m.virality_score is not none %}
+              <span class="text-[11px] text-emerald-400 font-mono">virality {{ m.virality_score }}/100</span>
+            {% endif %}
+            {% if selected.html_url %}<a href="{{ selected.html_url }}" target="_blank" rel="noopener" class="ml-auto text-[11px] text-zinc-500 hover:text-saffron-400">github →</a>{% endif %}
+          </div>
+          {% if m.title %}<h2 class="display-serif text-2xl text-ivory leading-tight">{{ m.title }}</h2>{% endif %}
+          {% if m.format %}<div class="text-[11px] text-zinc-500 mt-2">{{ m.format }}{% if m.audience %} · {{ m.audience }}{% endif %}</div>{% endif %}
+          {% if m.domain %}<div class="text-[11px] text-zinc-400 mt-1.5 italic">{{ m.domain }}</div>{% endif %}
+          {% if m.tags %}
+            <div class="flex flex-wrap gap-1.5 mt-3">
+              {% for t in m.tags %}<span class="text-[10px] text-saffron-600/70 bg-midnight-900/60 border border-midnight-800 rounded px-2 py-0.5 font-mono">#{{ t }}</span>{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        <article class="brief-prose">{{ selected.body_html|safe }}</article>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<style>
+  .heatmap-grid { display: flex; gap: 3px; }
+  .heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+  .heatmap-cell { width: 12px; height: 12px; border-radius: 2px; }
+  .heatmap-empty { background: transparent; }
+  .heatmap-absent { background: #101627; border: 1px solid #1a2138; }
+  .heatmap-present {
+    background: linear-gradient(135deg, rgba(212,160,23,0.55), rgba(212,160,23,0.85));
+    border: 1px solid rgba(212,160,23,0.6);
+    cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+  }
+  .heatmap-present:hover { transform: scale(1.4); z-index: 5; box-shadow: 0 0 8px rgba(212,160,23,0.4); }
+  .heatmap-today { background: linear-gradient(135deg, rgba(52,211,153,0.6), rgba(52,211,153,0.9)); border-color: rgba(52,211,153,0.7); }
+  .heatmap-selected { outline: 1px solid #f4c542; outline-offset: 1px; }
+  .brief-archive-card { border: 1px solid rgba(255,255,255,0.04); background: rgba(10,14,31,0.4); }
+  .brief-archive-card:hover { border-color: rgba(212,160,23,0.3); background: rgba(212,160,23,0.03); }
+  .brief-archive-active { border-color: #d4a017 !important; background: rgba(212,160,23,0.08) !important; box-shadow: inset 2px 0 0 #d4a017; }
+  .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .brief-prose { color: #e8ddc1; font-family: '"Cormorant Garamond"', Georgia, serif; font-size: 17px; line-height: 1.65; }
+  .brief-prose h1, .brief-prose h2, .brief-prose h3 { font-family: '"Cormorant Garamond"', Georgia, serif; color: #f4c542; }
+  .brief-prose h1 { font-size: 1.75rem; margin: 1.5rem 0 0.75rem; }
+  .brief-prose h2 { font-size: 1.35rem; margin: 1.5rem 0 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(212,160,23,0.18); }
+  .brief-prose h3 { font-size: 1.1rem; margin: 1.25rem 0 0.4rem; color: #f6d57e; }
+  .brief-prose p { margin: 0.75rem 0; color: #d4c9a8; }
+  .brief-prose strong { color: #f4c542; font-weight: 600; }
+  .brief-prose em { color: #f6d57e; }
+  .brief-prose ul, .brief-prose ol { margin: 0.5rem 0 1rem 1.5rem; }
+  .brief-prose li { margin: 0.4rem 0; color: #d4c9a8; }
+  .brief-prose a { color: #f4c542; text-decoration: underline; text-underline-offset: 3px; }
+  .brief-prose code { font-family: '"JetBrains Mono"', monospace; font-size: 0.85em; background: #101627; color: #f6d57e; padding: 1px 6px; border-radius: 3px; }
+  .brief-prose blockquote { border-left: 2px solid #b8860b; padding-left: 1rem; margin: 1rem 0; color: #d4c9a8; font-style: italic; }
+</style>

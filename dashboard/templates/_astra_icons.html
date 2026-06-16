@@ -1,0 +1,162 @@
+{#
+  Astra icons — minimalist single-stroke SVGs for each mythological weapon.
+  All use currentColor so they inherit text color. viewBox=24×24, 1.5px stroke.
+
+  Usage:  {% from '_astra_icons.html' import astra_icon %}
+          {{ astra_icon('veena', class='w-5 h-5 text-saffron-400') }}
+
+  Keys map to FleetEntry.astra (lowercased) plus 'vajra' for Indra.
+#}
+
+{% macro astra_icon(key, class='w-5 h-5') -%}
+{%- set k = (key or '')|lower -%}
+{%- if k == 'vajra' -%}
+  {# Indra's thunderbolt — diamond center, three prongs each end #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M12 4 v16"/>
+    <path d="M9 2 L9 5 M15 2 L15 5 M9 19 L9 22 M15 19 L15 22"/>
+    <path d="M8 6 L12 4 L16 6"/>
+    <path d="M8 18 L12 20 L16 18"/>
+    <path d="M10 9 L12 11 L14 9 M10 15 L12 13 L14 15"/>
+    <circle cx="12" cy="12" r="1.2"/>
+  </svg>
+{%- elif k == 'veena' -%}
+  {# Saraswati's instrument — long neck, round gourd resonator, small top #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <circle cx="7.5" cy="17" r="4.5"/>
+    <path d="M9.5 13.5 L19 4"/>
+    <path d="M18 3 L21 6 L20 7 L17 4 Z"/>
+    <path d="M11 11 L17 17"/>
+    <path d="M8 14 L11 17 M6 16 L9 19"/>
+  </svg>
+{%- elif k == 'pustaka' -%}
+  {# Open manuscript — two palm-leaf pages spread #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M3 6 L12 8 L21 6 L21 19 L12 21 L3 19 Z"/>
+    <path d="M12 8 L12 21"/>
+    <path d="M5.5 10 L9.5 11 M5.5 13 L9.5 14 M5.5 16 L9.5 17"/>
+    <path d="M14.5 11 L18.5 10 M14.5 14 L18.5 13 M14.5 17 L18.5 16"/>
+  </svg>
+{%- elif k == 'sudarshana chakra' or k == 'chakra' -%}
+  {# Vishnu's discus — 8 spokes radiating from a central hub #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <circle cx="12" cy="12" r="8.5"/>
+    <circle cx="12" cy="12" r="2.5"/>
+    <path d="M12 1 L12 4.5 M12 19.5 L12 23 M1 12 L4.5 12 M19.5 12 L23 12"/>
+    <path d="M4 4 L6.5 6.5 M17.5 17.5 L20 20 M4 20 L6.5 17.5 M17.5 6.5 L20 4"/>
+  </svg>
+{%- elif k == 'garuda' -%}
+  {# Eagle of Vishnu — wings spread, sharp downward V form #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M2 8 C 6 6, 9 7, 12 10 C 15 7, 18 6, 22 8"/>
+    <path d="M5 10 C 8 9, 10 9.5, 12 11 C 14 9.5, 16 9, 19 10"/>
+    <path d="M12 10 L12 17"/>
+    <path d="M10 17 L12 19 L14 17"/>
+    <circle cx="12" cy="9" r="0.6" fill="currentColor"/>
+  </svg>
+{%- elif k == 'shankha' -%}
+  {# Conch — a spiral with a flared opening #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M19 4 C 14 2, 8 3, 6 8 C 4 12, 6 17, 11 19 C 14 20, 18 18, 20 15"/>
+    <path d="M20 15 L22 16 L21 13"/>
+    <path d="M9 9 C 11 7, 14 7, 15 10 C 16 12, 14 14, 12 14 C 10.5 14, 10 12.5, 11 11.5"/>
+  </svg>
+{%- elif k == 'damaru' -%}
+  {# Shiva's drum — hourglass with two beads on strings #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M5 4 L19 4 L19 6 L13 11 L13 13 L19 18 L19 20 L5 20 L5 18 L11 13 L11 11 L5 6 Z"/>
+    <path d="M12 12 L8 14 M12 12 L16 10"/>
+    <circle cx="7.5" cy="14.5" r="0.9" fill="currentColor"/>
+    <circle cx="16.5" cy="9.5" r="0.9" fill="currentColor"/>
+  </svg>
+{%- elif k == 'manthan' -%}
+  {# Manthan — Samudra Manthan / cosmic churning. Two ropes spiraling around a central rod with a treasure-bead emerging. #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <path d="M12 3 L12 21"/>
+    <path d="M7 6 C 10 9, 14 9, 17 6"/>
+    <path d="M7 10 C 10 7, 14 7, 17 10"/>
+    <path d="M7 14 C 10 17, 14 17, 17 14"/>
+    <path d="M7 18 C 10 15, 14 15, 17 18"/>
+    <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
+  </svg>
+{%- elif k == 'mantra' -%}
+  {# Sacred utterance — three stacked sound-waves emanating from a central glyph (oṁ-like). #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+    <path d="M7 12 C 7 9.5, 9 7, 12 7"/>
+    <path d="M17 12 C 17 14.5, 15 17, 12 17"/>
+    <path d="M4 12 C 4 7.5, 7.5 4, 12 4"/>
+    <path d="M20 12 C 20 16.5, 16.5 20, 12 20"/>
+    <path d="M1.5 12 L3 12 M21 12 L22.5 12"/>
+  </svg>
+{%- elif k == 'aahvana' or k == 'āhvāna' -%}
+  {# Invocation — concentric arcs radiating outward toward a single dot (calling one from the many) #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" class="{{ class }}">
+    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+    <path d="M5 12 A 7 7 0 0 1 8 6.5"/>
+    <path d="M19 12 A 7 7 0 0 0 16 6.5"/>
+    <path d="M2.5 12 A 9.5 9.5 0 0 1 6.5 4.5"/>
+    <path d="M21.5 12 A 9.5 9.5 0 0 0 17.5 4.5"/>
+    <path d="M12 16 L12 21"/>
+    <path d="M9.5 19 L12 16 L14.5 19"/>
+  </svg>
+{%- elif k == 'pasha' -%}
+  {# Devi's noose — a loop with a knot at the bottom and trailing rope #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" class="{{ class }}">
+    <ellipse cx="12" cy="9" rx="6" ry="5"/>
+    <path d="M12 14 L11 16 L13 17 L11 18 L13 19 L11 21"/>
+    <path d="M10 16 L14 16"/>
+  </svg>
+{%- else -%}
+  {# Fallback — small chakra glyph #}
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" class="{{ class }}">
+    <circle cx="12" cy="12" r="8"/>
+    <circle cx="12" cy="12" r="2"/>
+    <path d="M12 4 L12 6 M12 18 L12 20 M4 12 L6 12 M18 12 L20 12"/>
+  </svg>
+{%- endif -%}
+{% endmacro -%}
+
+
+{# Sri Yantra background watermark — geometric mandala used as faint page motif. #}
+{% macro sri_yantra(class='w-full h-full opacity-[0.025]') -%}
+<svg viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="0.6" class="{{ class }}">
+  <circle cx="100" cy="100" r="92"/>
+  <circle cx="100" cy="100" r="78"/>
+  {# 8 petals #}
+  {% for angle in [0, 45, 90, 135, 180, 225, 270, 315] %}
+    <path transform="rotate({{ angle }} 100 100)" d="M100 22 C 110 35, 110 50, 100 60 C 90 50, 90 35, 100 22 Z"/>
+  {% endfor %}
+  {# Upward triangles (Shiva) #}
+  <path d="M100 30 L150 120 L50 120 Z"/>
+  <path d="M100 45 L138 110 L62 110 Z"/>
+  <path d="M100 60 L128 105 L72 105 Z"/>
+  {# Downward triangles (Shakti) #}
+  <path d="M100 170 L150 80 L50 80 Z"/>
+  <path d="M100 155 L138 90 L62 90 Z"/>
+  <path d="M100 140 L128 95 L72 95 Z"/>
+  {# Bindu center #}
+  <circle cx="100" cy="100" r="2" fill="currentColor" stroke="none"/>
+</svg>
+{%- endmacro -%}
+
+
+{# Chakra loader — rotating dharma wheel for loading states. #}
+{% macro chakra_loader(class='w-5 h-5 text-saffron-500') -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" class="{{ class }} animate-spin" style="animation-duration: 3s">
+  <circle cx="12" cy="12" r="9"/>
+  <circle cx="12" cy="12" r="3"/>
+  <path d="M12 3 L12 6 M12 18 L12 21 M3 12 L6 12 M18 12 L21 12 M5.6 5.6 L7.7 7.7 M16.3 16.3 L18.4 18.4 M5.6 18.4 L7.7 16.3 M16.3 7.7 L18.4 5.6"/>
+</svg>
+{%- endmacro -%}
+
+
+{# Lotus pulse — bloom that opens and closes for "running" state. #}
+{% macro lotus_pulse(class='w-3 h-3 text-saffron-400') -%}
+<svg viewBox="0 0 24 24" fill="currentColor" class="{{ class }}" style="animation: lotus-bloom 2s ease-in-out infinite;">
+  {% for angle in [0, 60, 120, 180, 240, 300] %}
+    <ellipse transform="rotate({{ angle }} 12 12)" cx="12" cy="7" rx="2.5" ry="4" opacity="0.85"/>
+  {% endfor %}
+  <circle cx="12" cy="12" r="2" fill="currentColor"/>
+</svg>
+{%- endmacro -%}

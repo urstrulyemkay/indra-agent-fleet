@@ -1,0 +1,49 @@
+{# Activity feed — unified stream of n8n executions + GitHub commits across all 3 live agents. #}
+<div class="mb-6">
+  <h1 class="display-serif page-title text-2xl text-ivory">Activity</h1>
+  <p class="text-xs text-zinc-500 mt-2">Real events from all 3 live agents — n8n executions + GitHub commits, newest first.</p>
+</div>
+
+<div class="card">
+  <div class="px-4 py-3 border-b border-midnight-800 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-[10px] uppercase tracking-widest text-saffron-600/80">Unified feed</span>
+      <span class="text-[10px] text-zinc-600">{{ feed|length }} events</span>
+    </div>
+    <div class="flex items-center gap-1.5 text-[10px] text-zinc-500">
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+      <span>refresh the page to update</span>
+    </div>
+  </div>
+  <div id="activity-list" class="divide-y divide-midnight-800/60 max-h-[calc(100vh-220px)] overflow-y-auto">
+    {% for ev in feed %}
+      <a href="{{ ev.link }}" target="_blank" rel="noopener"
+         class="flex items-baseline gap-3 px-4 py-2.5 hover:bg-midnight-900/40 transition group">
+        <span class="font-mono text-[11px] text-zinc-600 w-20 shrink-0">{{ ev.ts[:10] }}</span>
+        <span class="font-mono text-[11px] text-zinc-600 w-16 shrink-0">{{ ev.ts[11:19] }}</span>
+        {% if ev.kind == 'github' %}
+          <span class="text-[10px] uppercase tracking-widest w-12 shrink-0 text-emerald-400/80">github</span>
+        {% elif ev.kind == 'n8n' %}
+          {% if ev.level == 'error' %}
+            <span class="text-[10px] uppercase tracking-widest w-12 shrink-0 text-sindoor-400">n8n</span>
+          {% else %}
+            <span class="text-[10px] uppercase tracking-widest w-12 shrink-0 text-saffron-500/80">n8n</span>
+          {% endif %}
+        {% else %}
+          <span class="text-[10px] uppercase tracking-widest w-12 shrink-0 text-zinc-500">·</span>
+        {% endif %}
+        <span class="text-[11px] text-saffron-400/80 w-44 shrink-0 truncate">{{ ev.agent_label }}</span>
+        <span class="text-[12px] text-zinc-300 truncate flex-1 group-hover:text-ivory">{{ ev.title }}</span>
+        {% if ev.level == 'error' %}
+          <span class="text-[10px] text-sindoor-400 ml-2 shrink-0">error</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+    {% if not feed %}
+      <div class="px-4 py-12 text-center text-xs text-zinc-600">
+        <div class="display-serif text-saffron-600/60 text-lg mb-2">No activity yet</div>
+        <div>The feed pulls from n8n executions and GitHub commits. Comment on a configured IG post or wait for the next cloud-routine run.</div>
+      </div>
+    {% endif %}
+  </div>
+</div>

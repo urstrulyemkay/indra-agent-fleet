@@ -1,0 +1,147 @@
+{# Gold & Silver Rates console.
+   Reads the daily price snapshot from the public GOLD_RATES_GIST (written by
+   api/gold-rates-cron.js on manikumarjami.com), plus Gold & Silver Alerts
+   subscriber count from Brevo and recent >5% alert sends from the private
+   queue Gist. #}
+{% set G = gold %}
+{% set S = G.snapshot %}
+
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if G.configured %}
+          <span class="pill" style="background:rgba(0,230,118,.12);border:1px solid rgba(0,230,118,.3);color:#00e676;">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>LIVE · Vercel Cron + Brevo
+          </span>
+        {% else %}
+          <span class="pill pill-roadmap">not configured</span>
+        {% endif %}
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">manikumarjami.com/gold-rates</span>
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">Gold &amp; Silver Rates</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">
+        Daily India gold &amp; silver rates (24K/22K/18K gold + silver, national + 15 cities) with
+        an international comparison. A Vercel Cron refreshes the snapshot once a day and emails the
+        <span class="text-emerald-400 font-mono">Gold &amp; Silver Alerts</span> list whenever either
+        metal moves more than 5% day-over-day.
+      </p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0">
+      <a href="https://manikumarjami.com/gold-rates" target="_blank" class="text-xs text-emerald-400 hover:text-emerald-300 transition">Open /gold-rates &#8599;</a>
+      {% if S %}
+        <span class="text-[11px] text-zinc-600 font-mono">snapshot: {{ S.date }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">24K gold / 10g</div>
+      <div class="display-serif text-2xl text-ivory mt-1">{{ "₹%.0f"|format(S.national.gold['24k_per_10g']) if S else "—" }}</div>
+      {% if S %}
+        {% set gc = S.change_pct.gold %}
+        <div class="text-[10px] mt-0.5" style="color:{{ '#34d399' if gc >= 0 else '#f06b5e' }}">{{ "%+.2f"|format(gc) }}% vs yesterday</div>
+      {% else %}
+        <div class="text-[10px] text-zinc-600 mt-0.5">no data</div>
+      {% endif %}
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">22K gold / 10g</div>
+      <div class="display-serif text-2xl text-ivory mt-1">{{ "₹%.0f"|format(S.national.gold['22k_per_10g']) if S else "—" }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">18K: {{ "₹%.0f"|format(S.national.gold['18k_per_10g']) if S else "—" }}</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">Silver / kg</div>
+      <div class="display-serif text-2xl text-saffron-300 mt-1">{{ "₹%.0f"|format(S.national.silver.per_kg) if S else "—" }}</div>
+      {% if S %}
+        {% set sc = S.change_pct.silver %}
+        <div class="text-[10px] mt-0.5" style="color:{{ '#34d399' if sc >= 0 else '#f06b5e' }}">{{ "%+.2f"|format(sc) }}% vs yesterday</div>
+      {% else %}
+        <div class="text-[10px] text-zinc-600 mt-0.5">no data</div>
+      {% endif %}
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">Alert subscribers</div>
+      <div class="display-serif text-2xl text-ivory mt-1">{{ G.subscriber_count if G.subscriber_count is not none else "—" }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">Gold &amp; Silver Alerts (Brevo)</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+  <!-- City rates -->
+  <div class="card p-5 lg:col-span-3">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">City rates (24K gold / 10g &middot; silver / kg)</h2>
+      <button hx-get="/api/gold-rates-stats" hx-target="closest .card" hx-swap="outerHTML"
+              class="text-[10px] text-zinc-600 hover:text-zinc-400 transition">&#8635; refresh</button>
+    </div>
+    {% if S and S.cities %}
+      <div class="grid grid-cols-[1fr_110px_110px] gap-2 pb-2 border-b border-midnight-800 mb-1">
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">City</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600 text-right">Gold 24K /10g</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600 text-right">Silver /kg</span>
+      </div>
+      <div class="divide-y divide-midnight-800 max-h-[420px] overflow-y-auto">
+        {% for slug, c in S.cities.items() %}
+          <div class="grid grid-cols-[1fr_110px_110px] gap-2 items-center py-2">
+            <span class="text-[12px] text-ivory">{{ c.name }}</span>
+            <span class="text-[12px] text-zinc-300 font-mono text-right">₹{{ "%.0f"|format(c.gold['24k_per_10g']) }}</span>
+            <span class="text-[12px] text-zinc-300 font-mono text-right">₹{{ "%.0f"|format(c.silver.per_kg) }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600">No snapshot yet. The Vercel cron writes gold_rates_latest.json daily at 06:00 IST.</p>
+    {% endif %}
+    {% if G.error %}
+      <p class="text-[11px] text-sindoor-400 mt-4 italic">{{ G.error }}</p>
+    {% endif %}
+  </div>
+
+  <!-- International + alert history -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">International</h2>
+    </div>
+    {% if S %}
+      <div class="space-y-2 mb-5">
+        <div class="flex items-baseline justify-between">
+          <span class="text-[12px] text-zinc-400">XAU (gold) / oz</span>
+          <span class="text-[12px] text-ivory font-mono">${{ S.international.xau_usd_per_oz }}</span>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span class="text-[12px] text-zinc-400">XAG (silver) / oz</span>
+          <span class="text-[12px] text-ivory font-mono">${{ S.international.xag_usd_per_oz }}</span>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <span class="text-[12px] text-zinc-400">USD / INR</span>
+          <span class="text-[12px] text-ivory font-mono">₹{{ S.international.usd_inr }}</span>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 mb-5">No snapshot yet.</p>
+    {% endif %}
+
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Recent alerts (&gt;5% moves)</h2>
+    </div>
+    {% if G.alert_history %}
+      <div class="divide-y divide-midnight-800">
+        {% for a in G.alert_history %}
+          {% set tint = '#34d399' if a.change_pct >= 0 else '#f06b5e' %}
+          <div class="flex items-center justify-between py-2">
+            <span class="text-[12px] text-ivory capitalize">{{ a.metal }}</span>
+            <span class="text-[11px] font-mono" style="color:{{ tint }}">{{ "%+.2f"|format(a.change_pct) }}%</span>
+            <span class="text-[11px] text-zinc-500">{{ a.recipients }} sent</span>
+            <span class="text-[11px] text-zinc-600">{{ a.sent_at[:10] }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 py-2">No alerts sent yet — only fires on &gt;5% day-over-day moves.</p>
+    {% endif %}
+  </div>
+</div>

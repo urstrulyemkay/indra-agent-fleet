@@ -1,0 +1,17 @@
+{% if metrics %}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    {% for m in metrics %}
+      {% set color =
+        'text-saffron-300'  if m.emphasis == 'live' else
+        'text-sindoor-300'  if m.emphasis == 'warn' else
+        'text-ivory' %}
+      <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 truncate">{{ m.label }}</div>
+        <div class="display-serif text-2xl mt-1 {{ color }}">{{ m.value }}</div>
+        {% if m.hint %}
+          <div class="text-[10px] text-zinc-600 mt-0.5 truncate">{{ m.hint }}</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

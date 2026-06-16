@@ -1,0 +1,203 @@
+{% from '_astra_icons.html' import astra_icon %}
+{% set entry = state.entry %}
+<div>
+  <!-- Header -->
+  <div class="flex items-start gap-4 mb-6">
+    <div class="text-saffron-400 shrink-0 mt-1">
+      {{ astra_icon(entry.astra or 'aahvana', class='w-9 h-9') }}
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if entry.production_status == 'live' %}
+          <span class="pill pill-live"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live"></span>LIVE</span>
+        {% elif entry.built %}
+          <span class="pill pill-roadmap">{{ state.status or 'idle' }}</span>
+        {% else %}
+          <span class="pill pill-roadmap">roadmap</span>
+        {% endif %}
+        {% if entry.runtime %}
+          <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">runtime · {{ entry.runtime }}</span>
+        {% endif %}
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">{{ entry.label }}</h1>
+      <p class="text-sm text-zinc-400 max-w-3xl mt-3 leading-relaxed">{{ entry.description }}</p>
+    </div>
+  </div>
+
+  {% if entry.name == 'comment_dm_responder' %}
+    <!-- Live IG console embedded -->
+    <div id="ig-console" hx-get="/api/ig-stats" hx-trigger="load" hx-swap="innerHTML">
+      {% include '_console_skeleton.html' %}
+    </div>
+
+    <!-- How it works -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Follower path</div>
+        <ol class="text-[12px] text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+          <li>Comment received</li>
+          <li>Meta API: follow check</li>
+          <li>Public reply (1 of 10 variants)</li>
+          <li>Link DM (1 of 10 variants)</li>
+          <li>Mark dedup (no repeat sends)</li>
+        </ol>
+      </div>
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Non-follower path</div>
+        <ol class="text-[12px] text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+          <li>Comment received</li>
+          <li>Meta API: not following</li>
+          <li>Public reply (same variants)</li>
+          <li>Gated DM with [I followed!] / [Already ✓] buttons</li>
+          <li>Tap → re-check → link or re-gate</li>
+        </ol>
+      </div>
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Anti-spam guards</div>
+        <ul class="text-[12px] text-zinc-400 space-y-1.5 leading-relaxed">
+          <li>· Spam keyword filter</li>
+          <li>· Skip own replies (echo)</li>
+          <li>· Skip nested comments</li>
+          <li>· Dedup per (campaign, sender)</li>
+          <li>· Anti-repeat template picker</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="card p-5 mt-6">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-3">Actions</div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/templates" hx-get="/templates" hx-target="#main" hx-push-url="/templates"
+           class="text-[12px] px-3 py-1.5 rounded border border-midnight-700 text-zinc-300 hover:border-saffron-500/40 hover:text-saffron-300 transition">Edit templates</a>
+        <a href="/activity" hx-get="/activity" hx-target="#main" hx-push-url="/activity"
+           class="text-[12px] px-3 py-1.5 rounded border border-midnight-700 text-zinc-300 hover:border-saffron-500/40 hover:text-saffron-300 transition">Activity feed</a>
+        <a href="/integrations" hx-get="/integrations" hx-target="#main" hx-push-url="/integrations"
+           class="text-[12px] px-3 py-1.5 rounded border border-midnight-700 text-zinc-300 hover:border-saffron-500/40 hover:text-saffron-300 transition">Integrations</a>
+        <span class="text-[11px] text-zinc-600 self-center ml-auto font-mono">add new post: python -m core.n8n_deployer --add-post …</span>
+      </div>
+    </div>
+
+    {% if entry.astra %}
+      <div class="mt-6 flex items-baseline gap-2 text-xs text-zinc-500">
+        <span class="devanagari text-saffron-400">{{ entry.astra_devanagari or 'आह्वान' }}</span>
+        <span class="text-saffron-600/80 uppercase tracking-widest">{{ entry.astra }}</span>
+        <span class="italic">— {{ entry.astra_meaning or "the invocation — calls one soul out of the crowd into a personal moment." }}</span>
+      </div>
+    {% endif %}
+  {% elif entry.name == 'job_hunter' %}
+    <!-- Workflow pipeline -->
+    {% if state.workflow_steps %}
+      <div class="card p-5 mb-6">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-3">Pipeline</div>
+        <ol class="grid grid-cols-1 md:grid-cols-4 gap-3 text-[12px]">
+          {% for s in state.workflow_steps %}
+            {% set is_current = state.current_step_key == s.key %}
+            {% set is_past = loop.index0 <= state.current_step_idx and state.current_step_idx >= 0 %}
+            <li class="rounded-lg border p-3 {% if is_current %}border-saffron-500/60 bg-saffron-500/5{% elif is_past %}border-emerald-700/40 bg-emerald-500/5{% else %}border-midnight-800 bg-midnight-950{% endif %}">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="font-mono text-[10px] {% if is_current %}text-saffron-300{% elif is_past %}text-emerald-400{% else %}text-zinc-600{% endif %}">{{ '%02d'|format(loop.index) }}</span>
+                <span class="{% if is_current %}text-saffron-200{% elif is_past %}text-emerald-300{% else %}text-zinc-400{% endif %} font-medium">{{ s.label }}</span>
+              </div>
+              <div class="text-[11px] text-zinc-500 leading-relaxed">{{ s.description }}</div>
+            </li>
+          {% endfor %}
+        </ol>
+      </div>
+    {% endif %}
+
+    <!-- Run form -->
+    <div class="mb-6">
+      {% include '_run_forms/job_hunter.html' %}
+    </div>
+
+    <!-- Latest run output (ranking + selected job CV / keywords / fit / referral) -->
+    <div id="job-hunter-latest" hx-get="/api/agent/job_hunter/latest" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card p-5 text-[12px] text-zinc-500">Loading latest run…</div>
+    </div>
+
+    <!-- Where outputs land -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Per-job folder (cv-builder)</div>
+        <ul class="text-[12px] text-zinc-400 space-y-1.5 leading-relaxed">
+          <li><span class="font-mono text-saffron-300">jd.md</span> — JD + ATS keywords + 4-dim fit notes + reframed title</li>
+          <li><span class="font-mono text-saffron-300">tailored-cv.md</span> — 2-page markdown preview of the CV</li>
+          <li><span class="font-mono text-saffron-300">data.json</span> — sample-data merged with Claude patches, render-ready</li>
+          <li><span class="font-mono text-saffron-300">fit-report.md</span> — 4-dim score + quick wins + cover-letter gaps</li>
+          <li><span class="font-mono text-saffron-300">cold-note.md</span> — 80-120 word cold note to the hiring manager</li>
+          <li class="text-zinc-500 pt-1">Render PDF: <span class="font-mono">python templates/render.py templates/&lt;region&gt;/cv.html.j2 jobs/&lt;slug&gt;/data.json jobs/&lt;slug&gt;/cv.pdf</span></li>
+        </ul>
+      </div>
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Run artifact (Indra)</div>
+        <ul class="text-[12px] text-zinc-400 space-y-1.5 leading-relaxed">
+          <li><span class="font-mono text-saffron-300">outputs/job_hunter/&lt;ts&gt;-&lt;query&gt;.md</span> — ranking table + every tailored block per job</li>
+          <li class="text-zinc-500">Surfaced at <a href="/artifacts" class="text-saffron-400 hover:underline" hx-get="/artifacts" hx-target="#main" hx-push-url="/artifacts">/artifacts</a></li>
+          <li class="text-zinc-500 pt-1">Apify actor: <span class="font-mono">curious_coder~linkedin-jobs-scraper</span> ($0.001/job, no rental)</li>
+          <li class="text-zinc-500">Override via <span class="font-mono">APIFY_LINKEDIN_ACTOR_ID</span> (input shape: <span class="font-mono">{urls, count, scrapeCompany}</span>)</li>
+        </ul>
+      </div>
+    </div>
+  {% elif entry.name == 'startup_lookup' %}
+    <!-- Workflow pipeline -->
+    {% if state.workflow_steps %}
+      <div class="card p-5 mb-6">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-3">Pipeline</div>
+        <ol class="grid grid-cols-1 md:grid-cols-4 gap-3 text-[12px]">
+          {% for s in state.workflow_steps %}
+            {% set is_current = state.current_step_key == s.key %}
+            {% set is_past = loop.index0 <= state.current_step_idx and state.current_step_idx >= 0 %}
+            <li class="rounded-lg border p-3 {% if is_current %}border-saffron-500/60 bg-saffron-500/5{% elif is_past %}border-emerald-700/40 bg-emerald-500/5{% else %}border-midnight-800 bg-midnight-950{% endif %}">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="font-mono text-[10px] {% if is_current %}text-saffron-300{% elif is_past %}text-emerald-400{% else %}text-zinc-600{% endif %}">{{ '%02d'|format(loop.index) }}</span>
+                <span class="{% if is_current %}text-saffron-200{% elif is_past %}text-emerald-300{% else %}text-zinc-400{% endif %} font-medium">{{ s.label }}</span>
+              </div>
+              <div class="text-[11px] text-zinc-500 leading-relaxed">{{ s.description }}</div>
+            </li>
+          {% endfor %}
+        </ol>
+      </div>
+    {% endif %}
+
+    <!-- Run form -->
+    <div class="mb-6">
+      {% include '_run_forms/startup_lookup.html' %}
+    </div>
+
+    <!-- Latest run output -->
+    <div id="startup-lookup-latest" hx-get="/api/agent/startup_lookup/latest" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card p-5 text-[12px] text-zinc-500">Loading latest scan…</div>
+    </div>
+
+    <!-- Where outputs land -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Data sources (free)</div>
+        <ul class="text-[12px] text-zinc-400 space-y-1.5 leading-relaxed">
+          <li><span class="font-mono text-saffron-300">entrackr.com/rss</span> — primary India deals feed</li>
+          <li><span class="font-mono text-saffron-300">yourstory.com</span> funding feed — secondary</li>
+          <li><span class="font-mono text-saffron-300">curious_coder~linkedin-jobs-scraper</span> — one search/run (~$0.05)</li>
+          <li class="text-zinc-500 pt-1">No Claude API call. Rewrite fit notes via <span class="font-mono">rank startup lookup latest</span> in a Code session.</li>
+        </ul>
+      </div>
+      <div class="card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Run artifact (Indra)</div>
+        <ul class="text-[12px] text-zinc-400 space-y-1.5 leading-relaxed">
+          <li><span class="font-mono text-saffron-300">outputs/startup_lookup/&lt;ts&gt;-india.md</span> — matches + unmatched raises</li>
+          <li class="text-zinc-500">Surfaced at <a href="/artifacts" class="text-saffron-400 hover:underline" hx-get="/artifacts" hx-target="#main" hx-push-url="/artifacts">/artifacts</a></li>
+          <li class="text-zinc-500 pt-1">RSS window is ~1-2 weeks (real-time feeds). Expect 2-5 matches/run.</li>
+        </ul>
+      </div>
+    </div>
+  {% elif entry.name == 'competitor_watcher' %}
+    <!-- Static Instagram creator benchmark -->
+    <div id="competitor-watcher-latest" hx-get="/api/agent/competitor_watcher/latest" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card p-5 text-[12px] text-zinc-500">Loading creator benchmark…</div>
+    </div>
+  {% else %}
+    <div class="card p-5">
+      <div class="text-sm text-zinc-400">This agent isn't currently part of the live ops.</div>
+    </div>
+  {% endif %}
+</div>

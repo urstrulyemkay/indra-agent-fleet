@@ -1,0 +1,26 @@
+{# Landing page hit when a recipient clicks the unsubscribe link in a labs results email. #}
+<div class="max-w-lg">
+  {% if row %}
+    <div class="card p-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-[10px] uppercase tracking-widest text-zinc-500 border border-midnight-800 rounded-full px-2 py-0.5">Unsubscribed</span>
+      </div>
+      <h1 class="display-serif page-title text-3xl text-ivory">You're off the list</h1>
+      <p class="text-sm text-zinc-400 mt-3">
+        <span class="text-saffron-300 font-mono">{{ row.email }}</span> has been removed from Mani's psychology newsletter. You'll still receive any transactional emails you specifically request (e.g. a new assessment result).
+      </p>
+      <p class="text-[11px] text-zinc-600 mt-4">
+        If this was a mistake, you can re-subscribe from any assessment results page on
+        <a href="https://manikumarjami.com/labs" class="text-saffron-400 hover:text-saffron-300">manikumarjami.com/labs</a>.
+      </p>
+    </div>
+  {% else %}
+    <div class="card p-6">
+      <span class="text-[10px] uppercase tracking-widest text-zinc-500 border border-midnight-800 rounded-full px-2 py-0.5">Invalid link</span>
+      <h1 class="display-serif page-title text-3xl text-ivory mt-2">Link not recognized</h1>
+      <p class="text-sm text-zinc-400 mt-3">
+        This unsubscribe link doesn't match any subscriber. It may have been mistyped or already used.
+      </p>
+    </div>
+  {% endif %}
+</div>

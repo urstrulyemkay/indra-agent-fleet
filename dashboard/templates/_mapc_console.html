@@ -1,0 +1,135 @@
+{# MAPC Study Guide Delivery console.
+   Reads live from Resend — no local storage. Filters by "MAPC" in subject line. #}
+{% set M = mapc %}
+
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if M.error %}
+          <span class="pill pill-roadmap">{{ M.error[:40] }}</span>
+        {% elif M.configured %}
+          <span class="pill" style="background:rgba(0,230,118,.12);border:1px solid rgba(0,230,118,.3);color:#00e676;">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>LIVE · n8n + Resend
+          </span>
+        {% else %}
+          <span class="pill pill-roadmap">not configured</span>
+        {% endif %}
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">manikumarjami.com/mapc → n8n → resend</span>
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">MAPC Study Guide Delivery</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">
+        Subscribers at <span class="text-emerald-400 font-mono">manikumarjami.com/mapc</span> get 4 subject-specific PDF download links via email (MPCE-021, 022, 023, 046). Each link is single-use, HMAC-signed, expires 48h. Live data from Resend.
+      </p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0">
+      <a href="https://manikumarjami.com/mapc" target="_blank" class="text-xs text-emerald-400 hover:text-emerald-300 transition">Open /mapc ↗</a>
+      {% if M.last_send_ts %}
+        <span class="text-[11px] text-zinc-600 font-mono">last: {{ M.last_send_ts }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">Today</div>
+      <div class="display-serif text-2xl text-ivory mt-1">{{ M.today_count }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">subscribers</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">Last 7 days</div>
+      <div class="display-serif text-2xl text-emerald-400 mt-1">{{ M.week_count }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">this week</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">Unique subscribers</div>
+      <div class="display-serif text-2xl text-saffron-300 mt-1">{{ M.total_visible }}</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">deduplicated</div>
+    </div>
+    <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(0,230,118,.6)">PDFs hosted</div>
+      <div class="display-serif text-2xl text-ivory mt-1">16</div>
+      <div class="text-[10px] text-zinc-600 mt-0.5">16 subjects (1st + 2nd year)</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+  <!-- Delivery status -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Delivery status</h2>
+      <span class="text-[10px] text-zinc-600">{{ M.by_status|length }} states</span>
+    </div>
+    {% if M.by_status %}
+      <div class="space-y-2.5">
+        {% set max_n = (M.by_status.values()|max) %}
+        {% for status, n in (M.by_status.items()|list|sort(attribute=1, reverse=true)) %}
+          {% set tint = '#34d399' if status in ('delivered','sent') else ('#f06b5e' if status in ('bounced','complained','failed','delivery_delayed') else '#f4c542') %}
+          <div>
+            <div class="flex items-baseline justify-between mb-1">
+              <span class="text-[12px] text-ivory">{{ status }}</span>
+              <span class="text-[11px] text-zinc-500 font-mono">{{ n }}</span>
+            </div>
+            <div class="h-1.5 bg-midnight-900 rounded overflow-hidden">
+              <div class="h-full rounded" style="width:{{ ((n/max_n)*100)|round(0)|int if max_n else 0 }}%;background:{{ tint }}"></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600">No sends yet. Subscribe at manikumarjami.com/mapc to test.</p>
+    {% endif %}
+    {% if M.error %}
+      <p class="text-[11px] text-sindoor-400 mt-4 italic">{{ M.error }}</p>
+    {% endif %}
+    {% if M.by_status.get('delivery_delayed') %}
+      <div class="mt-4 p-3 rounded-lg bg-saffron-300/5 border border-saffron-300/20">
+        <p class="text-[11px] text-saffron-300 font-semibold mb-1">What is "delivery_delayed"?</p>
+        <p class="text-[11px] text-zinc-500 leading-relaxed">
+          The recipient's mail server accepted the email but hasn't confirmed inbox delivery yet — usually because their server is busy or temporarily unreachable (called "greylisting"). Resend retries automatically for up to 72 hours. No action needed; it almost always resolves to "delivered" on its own. If it stays delayed beyond 3 days, the subscriber's email provider may be blocking bulk senders.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent subscribers -->
+  <div class="card p-5 lg:col-span-3">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">Recent subscribers</h2>
+      <button hx-get="/api/mapc-stats" hx-target="closest .card" hx-swap="outerHTML"
+              class="text-[10px] text-zinc-600 hover:text-zinc-400 transition">↻ refresh</button>
+    </div>
+    {% if M.recent %}
+      <!-- Table header -->
+      <div class="grid grid-cols-[1fr_110px_60px_95px_80px] gap-2 pb-2 border-b border-midnight-800 mb-1">
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Email</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Specialisation</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Via</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600">Subscribed (IST)</span>
+        <span class="text-[9px] uppercase tracking-widest text-zinc-600 text-right">Status</span>
+      </div>
+      <div class="divide-y divide-midnight-800">
+        {% for r in M.recent %}
+          {% set sc = 'text-emerald-400' if r.status in ('delivered','sent') else ('text-sindoor-400' if r.status in ('bounced','complained','failed') else 'text-saffron-300') %}
+          {% set cc = '#34d399' if r.course == 'Counselling' else ('#f06b5e' if r.course == 'Clinical' else ('#818cf8' if r.course == 'I&O Psychology' else ('#f4c542' if r.course == '1st Year' else '#71717a'))) %}
+          {% set via_color = 'text-emerald-400' if r.via == 'Resend' else 'text-amber-400' %}
+          <div class="grid grid-cols-[1fr_110px_60px_95px_80px] gap-2 items-center py-2.5">
+            <span class="text-[12px] text-ivory font-mono truncate">{{ r.email }}</span>
+            <span class="text-[11px] font-semibold truncate" style="color:{{ cc }}">{{ r.course }}</span>
+            <span class="text-[10px] {{ via_color }} font-mono">{{ r.via or 'Resend' }}</span>
+            <span class="text-[11px] text-zinc-500">{{ r.ts }}</span>
+            <span class="text-[10px] {{ sc }} font-mono uppercase tracking-wider text-right">{{ r.status }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-xs text-zinc-600 py-4">
+        No subscribers yet. When someone enters their email at
+        <a href="https://manikumarjami.com/mapc" target="_blank" class="text-emerald-400">manikumarjami.com/mapc</a>,
+        it shows up here.
+      </p>
+    {% endif %}
+  </div>
+</div>

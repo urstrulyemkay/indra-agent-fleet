@@ -1,0 +1,62 @@
+{% set entry = state.entry %}
+{% set status = state.status %}
+{% set current_idx = state.current_step_idx %}
+
+<div>
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2">
+      {% set dot =
+        'bg-saffron-400 pulse-dot' if status == 'running' else
+        'bg-zinc-500'              if status == 'idle'    else
+        'bg-sindoor-400'           if status == 'error'   else
+        'bg-midnight-700' %}
+      <span class="inline-block w-2 h-2 rounded-full {{ dot }}"></span>
+      <span class="text-[10px] uppercase tracking-widest text-saffron-600/80">{{ status }}</span>
+    </div>
+    {% if state.current_task %}
+      <div class="text-xs text-zinc-400 truncate max-w-md">▸ {{ state.current_task }}</div>
+    {% endif %}
+  </div>
+
+  {% if state.workflow_steps %}
+    <ol class="relative border-l border-midnight-800 ml-3 space-y-4">
+      {% for step in state.workflow_steps %}
+        {% set idx = loop.index0 %}
+        {% set is_running = (status == 'running' and idx == current_idx) %}
+        {% set is_done    = (current_idx >= 0 and idx < current_idx) %}
+        <li class="ml-5">
+          <span class="absolute -left-[7px] flex h-3.5 w-3.5 items-center justify-center rounded-full
+            {% if is_running %}bg-saffron-400 pulse-dot
+            {% elif is_done %}bg-saffron-700
+            {% elif status == 'error' and idx == current_idx %}bg-sindoor-400
+            {% else %}bg-midnight-700{% endif %}"></span>
+          <div class="flex items-baseline justify-between gap-2">
+            <div class="text-sm
+              {% if is_running %}text-saffron-300
+              {% elif is_done %}text-zinc-400
+              {% else %}text-zinc-500{% endif %}">
+              <span class="text-zinc-600 text-[10px] mr-2 font-mono">{{ "%02d"|format(idx+1) }}</span>
+              {{ step.label }}
+            </div>
+            <div class="text-[10px] uppercase tracking-widest shrink-0
+              {% if is_running %}text-saffron-400
+              {% elif is_done %}text-zinc-600
+              {% else %}text-zinc-700{% endif %}">
+              {% if is_running %}running
+              {% elif is_done %}done
+              {% else %}pending{% endif %}
+            </div>
+          </div>
+          <div class="text-xs text-zinc-600 mt-1 ml-6">{{ step.description }}</div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <div class="text-zinc-500 text-sm mb-2">Not yet invoked. Planned workflow:</div>
+    <ol class="list-decimal list-inside text-sm text-zinc-500 space-y-1.5">
+      {% for step in entry.workflow %}
+        <li>{{ step }}</li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+</div>

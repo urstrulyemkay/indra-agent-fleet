@@ -1,0 +1,63 @@
+<div class="card p-5">
+  <div class="flex items-baseline justify-between mb-3">
+    <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Latest scan</div>
+    <div class="text-[11px] text-zinc-600 font-mono">{{ run.artifact.created_at or "" }}</div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-center">
+    <div class="rounded-lg border border-midnight-800 bg-midnight-950 p-3">
+      <div class="text-xl text-saffron-300 font-semibold">{{ meta.matched_count if meta.matched_count is not none else "—" }}</div>
+      <div class="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Matches</div>
+    </div>
+    <div class="rounded-lg border border-midnight-800 bg-midnight-950 p-3">
+      <div class="text-xl text-ivory font-semibold">{{ meta.deals_count if meta.deals_count is not none else "—" }}</div>
+      <div class="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Deals</div>
+    </div>
+    <div class="rounded-lg border border-midnight-800 bg-midnight-950 p-3">
+      <div class="text-xl text-ivory font-semibold">{{ meta.jobs_scanned if meta.jobs_scanned is not none else "—" }}</div>
+      <div class="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Jobs scanned</div>
+    </div>
+    <div class="rounded-lg border border-midnight-800 bg-midnight-950 p-3">
+      <div class="text-xl text-ivory font-semibold">{{ meta.window_days if meta.window_days is not none else "—" }}d</div>
+      <div class="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Window</div>
+    </div>
+  </div>
+
+  {% if meta.top_matches %}
+    <div class="mb-4">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80 mb-2">Top matches</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-[12px]">
+          <thead>
+            <tr class="text-zinc-500 text-left border-b border-midnight-800">
+              <th class="py-1.5 pr-3 font-medium">Company</th>
+              <th class="py-1.5 pr-3 font-medium">Stage</th>
+              <th class="py-1.5 pr-3 font-medium">Roles</th>
+              <th class="py-1.5 pr-3 font-medium">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in meta.top_matches %}
+              <tr class="border-b border-midnight-900">
+                <td class="py-1.5 pr-3 text-ivory">{{ m.company }}</td>
+                <td class="py-1.5 pr-3 text-zinc-400">{{ m.stage|replace('series_','Series ')|replace('pre-seed','Pre-Seed')|title }}</td>
+                <td class="py-1.5 pr-3 text-zinc-400">{{ m.n_jobs }}</td>
+                <td class="py-1.5 pr-3 text-saffron-300">{{ m.score }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <details class="mt-2">
+    <summary class="text-[12px] text-saffron-400 cursor-pointer hover:underline">View full markdown bundle</summary>
+    <pre class="mt-3 text-[11px] text-zinc-300 whitespace-pre-wrap leading-relaxed bg-midnight-950 border border-midnight-800 rounded-lg p-4 max-h-[480px] overflow-y-auto">{{ run.body }}</pre>
+  </details>
+
+  <div class="text-[11px] text-zinc-600 mt-3">
+    Artifact: <span class="font-mono text-zinc-500">{{ run.artifact.path }}</span> ·
+    <a href="/artifacts" class="text-saffron-400 hover:underline" hx-get="/artifacts" hx-target="#main" hx-push-url="/artifacts">all artifacts</a>
+  </div>
+</div>

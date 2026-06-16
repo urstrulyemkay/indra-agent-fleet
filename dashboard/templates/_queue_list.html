@@ -1,0 +1,53 @@
+{% if not drafts %}
+  <div class="bg-midnight-900/40 border border-midnight-800 border-dashed rounded-xl p-8 text-center">
+    <div class="text-sm text-zinc-400">No pending drafts.</div>
+    <div class="text-xs text-zinc-600 mt-1">Run <span class="font-mono text-saffron-600/80">comment_dm_responder</span> or <span class="font-mono text-saffron-600/80">dm_triage</span> to populate the queue.</div>
+  </div>
+{% else %}
+  <div class="space-y-2">
+    {% for d in drafts %}
+      {% set kind_badge =
+        'bg-saffron-500/15 text-saffron-300 border-saffron-600/30' if d.kind == 'public_reply' else
+        'bg-emerald-500/15 text-emerald-300 border-emerald-600/30' if d.kind == 'dm' else
+        'bg-zinc-700/30 text-zinc-300 border-zinc-700' %}
+      <div id="draft-{{ d.id }}" class="bg-midnight-900/60 border border-midnight-800 rounded-xl px-4 py-3 hover:border-zinc-700 transition">
+        <div class="flex items-start gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 mb-1.5 text-[10px]">
+              <span class="uppercase tracking-widest border rounded-full px-2 py-0.5 {{ kind_badge }}">{{ d.kind }}</span>
+              {% if d.target_handle %}
+                <span class="text-zinc-500 font-mono">→ {{ d.target_handle }}</span>
+              {% endif %}
+              {% if d.category %}
+                <span class="text-zinc-600">· {{ d.category.replace('_', ' ') }}</span>
+              {% endif %}
+              <span class="text-zinc-700 ml-auto font-mono">{{ d.created_at[5:19].replace('T', ' ') }}</span>
+            </div>
+            {% if d.source_text %}
+              <div class="text-[11px] text-zinc-500 italic mb-1.5 line-clamp-2">↳ in reply to: "{{ d.source_text }}"</div>
+            {% endif %}
+            <div class="text-sm text-ivory leading-relaxed">{{ d.body }}</div>
+          </div>
+          <div class="shrink-0 flex flex-col items-end gap-1">
+            <button
+              hx-post="/api/drafts/{{ d.id }}/approve"
+              hx-target="#draft-{{ d.id }}-action"
+              hx-swap="innerHTML"
+              hx-confirm="Send this {{ d.kind.replace('_', ' ') }} to {{ d.target_handle or '(unknown)' }}?"
+              class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-xs font-medium px-3 py-1 rounded transition">
+              Approve & send
+            </button>
+            <button
+              hx-post="/api/drafts/{{ d.id }}/reject"
+              hx-target="#draft-{{ d.id }}-action"
+              hx-swap="innerHTML"
+              class="text-zinc-500 hover:text-sindoor-400 text-[10px] transition">
+              reject
+            </button>
+            <div id="draft-{{ d.id }}-action"></div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

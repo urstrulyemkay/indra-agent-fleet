@@ -1,0 +1,39 @@
+{% if not runs %}
+  <div class="text-zinc-600 text-xs italic">No invocations yet. Run this astra once and history will appear here.</div>
+{% else %}
+  <div class="bg-midnight-900/60 border border-midnight-800 rounded-xl divide-y divide-midnight-800">
+    {% for r in runs %}
+      {% set status_color =
+        'text-saffron-400'   if r.status == 'running'   else
+        'text-emerald-400'   if r.status == 'completed' else
+        'text-sindoor-400'   if r.status == 'failed'    else 'text-zinc-500' %}
+      <div class="px-3.5 py-2.5 text-xs">
+        <div class="flex items-baseline justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-zinc-300 truncate">
+              <span class="text-zinc-600 font-mono text-[10px] mr-1.5">{{ r.started_at[5:19].replace('T', ' ') }}</span>
+              {{ r.task }}
+            </div>
+            {% if r.error %}
+              <div class="text-[11px] text-sindoor-400 mt-0.5 truncate" title="{{ r.error }}">err: {{ r.error }}</div>
+            {% endif %}
+          </div>
+          <div class="text-right shrink-0">
+            <div class="uppercase tracking-widest text-[9px] {{ status_color }}">{{ r.status }}</div>
+            {% if r.duration_s is not none %}
+              <div class="text-[10px] text-zinc-600 font-mono">
+                {% if r.duration_s < 1 %}<1s
+                {% elif r.duration_s < 60 %}{{ "%.1f"|format(r.duration_s) }}s
+                {% else %}{{ "%dm %02ds"|format(r.duration_s // 60, r.duration_s % 60) }}
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+          {% if r.artifact_id %}
+            <a href="/api/artifacts/{{ r.artifact_id }}/view" target="_blank" class="text-[10px] text-zinc-500 hover:text-saffron-400 shrink-0">view →</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

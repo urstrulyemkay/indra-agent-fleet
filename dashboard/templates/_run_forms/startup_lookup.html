@@ -1,0 +1,46 @@
+<form hx-post="/api/run/startup_lookup" hx-target="#run-feedback" hx-swap="innerHTML"
+      class="bg-midnight-900/60 border border-midnight-800 rounded-xl p-5 space-y-3">
+  <div class="text-[11px] text-saffron-600/80 leading-relaxed">
+    Pulls India funding RSS (Entrackr + YourStory), filters by stage + recency, then runs <span class="font-mono text-saffron-400">one</span> Apify LinkedIn search for senior PM roles in India and cross-references the two.
+    <span class="text-zinc-500">No Claude API call — free. For an LLM-grade fit rewrite, run <span class="font-mono">rank startup lookup latest</span> in a Code session.</span>
+  </div>
+
+  <div>
+    <label class="block text-xs text-zinc-400 mb-1">Funding stages</label>
+    <div class="flex flex-wrap gap-3 text-xs text-zinc-300">
+      <label class="flex items-center gap-1.5"><input type="checkbox" name="stages" value="pre-seed" checked class="accent-saffron-500"> Pre-seed</label>
+      <label class="flex items-center gap-1.5"><input type="checkbox" name="stages" value="seed" checked class="accent-saffron-500"> Seed</label>
+      <label class="flex items-center gap-1.5"><input type="checkbox" name="stages" value="series_a" checked class="accent-saffron-500"> Series A</label>
+      <label class="flex items-center gap-1.5"><input type="checkbox" name="stages" value="series_b" checked class="accent-saffron-500"> Series B</label>
+      <label class="flex items-center gap-1.5"><input type="checkbox" name="stages" value="series_c" checked class="accent-saffron-500"> Series C</label>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Window <span class="text-zinc-600">(days)</span></label>
+      <input name="window_days" type="number" min="1" max="90" value="14"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Company cap</label>
+      <input name="company_cap" type="number" min="1" max="25" value="10"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Jobs to scan</label>
+      <input name="jobs_count" type="number" min="5" max="100" value="40"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Location</label>
+      <input name="location" value="India"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-1">
+    <div id="run-feedback" class="text-xs text-zinc-500"></div>
+    <button class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-sm font-medium px-4 py-2 rounded-lg transition">Open the Eye (Netra)</button>
+  </div>
+</form>

@@ -1,0 +1,49 @@
+<div>
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Prompts</h1>
+    <p class="text-xs text-zinc-500 mt-1">Every system prompt in the fleet. Click any prompt to see its full text and push it to Langfuse for tunable management.</p>
+  </div>
+
+  <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl">
+    <div class="grid grid-cols-12 px-4 py-2 border-b border-zinc-800 text-[10px] uppercase tracking-widest text-zinc-500">
+      <div class="col-span-5">name</div>
+      <div class="col-span-2">agent</div>
+      <div class="col-span-2">variant</div>
+      <div class="col-span-2">source</div>
+      <div class="col-span-1 text-right">action</div>
+    </div>
+    {% for row in rows %}
+      {% set p = row.def %}
+      {% set src = row.source %}
+      <a href="/prompts/{{ p.name }}"
+         hx-get="/prompts/{{ p.name }}" hx-target="#main" hx-swap="innerHTML" hx-push-url="/prompts/{{ p.name }}"
+         class="grid grid-cols-12 px-4 py-3 border-b border-zinc-900 last:border-0 text-sm hover:bg-zinc-900/40 transition">
+        <div class="col-span-5 font-mono text-zinc-300 truncate">{{ p.name }}</div>
+        <div class="col-span-2 text-zinc-400">{{ p.agent }}</div>
+        <div class="col-span-2 text-zinc-500 text-xs">{{ p.variant }}</div>
+        <div class="col-span-2">
+          {% if src == 'langfuse' %}
+            <span class="text-[10px] uppercase tracking-widest text-emerald-400 border border-emerald-500/40 rounded-full px-2 py-0.5">langfuse</span>
+          {% else %}
+            <span class="text-[10px] uppercase tracking-widest text-zinc-500 border border-zinc-800 rounded-full px-2 py-0.5">code</span>
+          {% endif %}
+        </div>
+        <div class="col-span-1 text-right text-zinc-600 text-xs">view →</div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="mt-6 bg-zinc-900/40 border border-zinc-800 rounded-xl p-4">
+    <div class="text-xs text-zinc-400 mb-2">Bulk push</div>
+    <div class="flex items-center gap-3">
+      <button
+        hx-post="/api/prompts/push-all" hx-target="#bulk-feedback" hx-swap="innerHTML"
+        hx-confirm="Push all prompts to Langfuse? This creates new versions with label=production."
+        class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-medium px-3 py-1.5 rounded-lg transition">
+        Push all to Langfuse
+      </button>
+      <div id="bulk-feedback" class="text-xs text-zinc-500"></div>
+    </div>
+    <div class="text-[10px] text-zinc-600 mt-2">After pushing, each prompt becomes editable in the Langfuse UI. Future agent runs pull the latest <span class="text-zinc-400">production</span> version.</div>
+  </div>
+</div>

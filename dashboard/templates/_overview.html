@@ -1,0 +1,34 @@
+{# Indra overview — three live agents at a glance. Renders on page load only; refresh the page to update. #}
+<div class="mb-7 flex items-baseline gap-3">
+  <h1 class="display-serif page-title text-2xl text-ivory">Fleet</h1>
+  <span class="devanagari text-sm text-saffron-600/80">अग्निदूत</span>
+  <span class="text-[11px] text-zinc-600 ml-auto">3 live · 1 staged</span>
+</div>
+
+<!-- Agent 1: IG auto-comment and DM -->
+<section class="mb-10">
+  <div id="ig-console" hx-get="/api/ig-stats" hx-trigger="load" hx-swap="innerHTML">
+    {% include '_console_skeleton.html' %}
+  </div>
+</section>
+
+<!-- Agent 2: Daily AI brief -->
+<section class="mb-10">
+  <div id="brief-console" hx-get="/api/brief-stats" hx-trigger="load" hx-swap="innerHTML">
+    {% include '_console_skeleton.html' %}
+  </div>
+</section>
+
+<!-- Agent 3: Thought Mechanic reel planner -->
+<section class="mb-10">
+  <div id="tm-console" hx-get="/api/tm-stats" hx-trigger="load" hx-swap="innerHTML">
+    {% include '_console_skeleton.html' %}
+  </div>
+</section>
+
+<!-- Agent 4: Lab assessment results emailer (built locally, not deployed) -->
+<section>
+  <div id="labs-console" hx-get="/api/labs-stats" hx-trigger="load" hx-swap="innerHTML">
+    {% include '_console_skeleton.html' %}
+  </div>
+</section>

@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Operational data — never commit these
+data/
+outputs/
+
+# n8n workflow exports contain hardcoded tokens in workflow static data
+n8n-flows/
+
+# Project-specific CLAUDE.md has personal operational details (Gist IDs, email filters)
+CLAUDE.md
+
+# Operational runbooks (domain/email-specific, not portable)
+docs/
+
+# Claude Code project config (IDE-specific, project-local)
+.claude/
+
+# macOS
+.DS_Store

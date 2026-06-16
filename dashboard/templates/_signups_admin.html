@@ -1,0 +1,86 @@
+{# Unified subscriber admin view — Labs + MAPC + Instagram, deduped, test emails filtered #}
+<div>
+  <div class="mb-6 flex items-baseline gap-3">
+    <h1 class="display-serif page-title text-3xl text-ivory">All Subscribers</h1>
+    <span class="text-[11px] text-zinc-600 ml-auto">refresh to update · owner emails filtered</span>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="card px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Total unique</div>
+      <div class="display-serif text-2xl text-ivory mt-1">{{ counts.total }}</div>
+    </div>
+    <div class="card px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Confirmed / Delivered</div>
+      <div class="display-serif text-2xl text-emerald-400 mt-1">{{ counts.confirmed }}</div>
+    </div>
+    <div class="card px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Pending</div>
+      <div class="display-serif text-2xl text-saffron-300 mt-1">{{ counts.pending }}</div>
+    </div>
+    <div class="card px-4 py-3">
+      <div class="text-[10px] uppercase tracking-widest text-saffron-600/80">Failed / Bounced</div>
+      <div class="display-serif text-2xl {% if counts.failed_send %}text-sindoor-400{% else %}text-zinc-500{% endif %} mt-1">{{ counts.failed_send }}</div>
+    </div>
+  </div>
+
+  <!-- Channel breakdown -->
+  {% if counts.by_channel %}
+  <div class="flex gap-3 mb-5 flex-wrap">
+    {% for ch, n in counts.by_channel.items() | sort %}
+      {% if ch == 'MAPC' %}{% set cc = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' %}
+      {% elif ch == 'Labs' %}{% set cc = 'bg-violet-500/10 border-violet-500/30 text-violet-400' %}
+      {% elif ch == 'Instagram' %}{% set cc = 'bg-pink-500/10 border-pink-500/30 text-pink-400' %}
+      {% else %}{% set cc = 'bg-zinc-800 border-zinc-700 text-zinc-400' %}{% endif %}
+      <div class="border rounded-lg px-4 py-2 {{ cc }}">
+        <span class="text-[10px] uppercase tracking-wider">{{ ch }}</span>
+        <span class="display-serif text-xl ml-2">{{ n }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Subscriber table -->
+  <div class="card overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-midnight-900/60 text-[10px] uppercase tracking-widest text-saffron-600/80">
+        <tr>
+          <th class="px-4 py-2.5 text-left">Email</th>
+          <th class="px-4 py-2.5 text-left">Channel</th>
+          <th class="px-4 py-2.5 text-left">Source</th>
+          <th class="px-4 py-2.5 text-left">Status</th>
+          <th class="px-4 py-2.5 text-left">Date</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-midnight-800">
+        {% for s in signups %}
+          {% set sc = 'text-emerald-400' if s.status in ('confirmed','delivered','sent') else ('text-sindoor-400' if s.status in ('bounced','failed','failed_send') else 'text-saffron-300') %}
+          {% if s.channel == 'MAPC' %}{% set badge = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' %}
+          {% elif s.channel == 'Labs' %}{% set badge = 'bg-violet-500/10 border-violet-500/30 text-violet-400' %}
+          {% elif s.channel == 'Instagram' %}{% set badge = 'bg-pink-500/10 border-pink-500/30 text-pink-400' %}
+          {% else %}{% set badge = 'bg-zinc-800 border-zinc-700 text-zinc-400' %}{% endif %}
+          <tr class="hover:bg-midnight-900/40 transition">
+            <td class="px-4 py-2.5 text-ivory font-mono text-[12px]">{{ s.email }}</td>
+            <td class="px-4 py-2.5">
+              <span class="border rounded px-2 py-0.5 text-[10px] font-700 uppercase tracking-wider {{ badge }}">
+                {{ s.channel }}
+              </span>
+            </td>
+            <td class="px-4 py-2.5 text-zinc-500 text-[11px] font-mono">{{ s.source or '—' }}</td>
+            <td class="px-4 py-2.5">
+              <span class="{{ sc }} text-[11px] uppercase tracking-wider">{{ s.status }}</span>
+            </td>
+            <td class="px-4 py-2.5 text-zinc-500 text-[11px] font-mono">{{ (s.created_at or '')[:16] }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-zinc-600 text-sm">
+              No subscribers yet.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

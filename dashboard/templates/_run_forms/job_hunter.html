@@ -1,0 +1,52 @@
+<form hx-post="/api/run/job_hunter" hx-target="#run-feedback" hx-swap="innerHTML"
+      class="bg-midnight-900/60 border border-midnight-800 rounded-xl p-5 space-y-3">
+  <div class="text-[11px] text-saffron-600/80 leading-relaxed">
+    Pulls fresh LinkedIn jobs via Apify, ranks them against <span class="font-mono text-saffron-400">cv builder/profile/master-profile.json</span>, then writes a tailored 2-page CV markdown per top match into <span class="font-mono text-saffron-400">cv builder/jobs/&lt;slug&gt;/</span>.
+    <span class="text-zinc-500">Drafts only. Port the markdown to <span class="font-mono">data.json</span> + run <span class="font-mono">templates/render.py</span> for the PDF.</span>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Target role <span class="text-rose-400">*</span></label>
+      <input name="target_role" required placeholder='e.g. "Staff Product Manager" or "GPM AI"'
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Location</label>
+      <input name="location" placeholder='e.g. "Bangalore" / "Berlin" / "Remote"'
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-xs text-zinc-400 mb-1">Keywords <span class="text-zinc-600">(comma or space separated — narrows the LinkedIn search)</span></label>
+    <input name="keywords" placeholder='e.g. "AI, marketplace, B2B SaaS"'
+      class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+  </div>
+
+  <div class="grid grid-cols-3 gap-3">
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Region template</label>
+      <select name="region"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+        <option value="india">india</option>
+        <option value="europe">europe</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Daily cap <span class="text-zinc-600">(≤10)</span></label>
+      <input name="scrape_limit" type="number" min="1" max="10" value="10"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-400 mb-1">Tailor limit <span class="text-zinc-600">(≤10)</span></label>
+      <input name="tailor_limit" type="number" min="1" max="10" value="5"
+        class="w-full bg-midnight-950 border border-midnight-800 rounded-lg px-3 py-2 text-sm text-ivory focus:outline-none focus:border-saffron-600/50">
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between pt-1">
+    <div id="run-feedback" class="text-xs text-zinc-500"></div>
+    <button class="bg-saffron-500 hover:bg-saffron-400 text-midnight-950 text-sm font-medium px-4 py-2 rounded-lg transition">Invoke Kaustubha</button>
+  </div>
+</form>

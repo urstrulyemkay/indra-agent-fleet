@@ -137,6 +137,15 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_templates_active ON templates(category, niche, kind, status);
+
+            -- MBT (Meet by Travel) creator outreach: local-only tracking of which
+            -- discovered profiles the operator has manually contacted or skipped.
+            -- Never written back to the source Google Sheet, never auto-sent.
+            CREATE TABLE IF NOT EXISTS mbt_outreach_status (
+                username TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending',   -- pending | contacted | skipped
+                updated_at TEXT NOT NULL
+            );
             """
         )
     _restrict_perms()
@@ -295,6 +304,25 @@ def draft_counts_by_status() -> dict[str, int]:
             "SELECT status, COUNT(*) AS n FROM drafts GROUP BY status"
         ).fetchall()
         return {r["status"]: r["n"] for r in rows}
+
+
+def set_mbt_status(username: str, status: str) -> None:
+    with _lock, _conn() as c:
+        now = _now_iso()
+        c.execute(
+            """
+            INSERT INTO mbt_outreach_status (username, status, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at
+            """,
+            (username.lower().strip(), status, now),
+        )
+
+
+def get_mbt_statuses() -> dict[str, str]:
+    with _conn() as c:
+        rows = c.execute("SELECT username, status FROM mbt_outreach_status").fetchall()
+        return {r["username"]: r["status"] for r in rows}
 
 
 def begin_run(agent_name: str, task: str) -> int:

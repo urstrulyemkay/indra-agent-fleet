@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 
-Category = Literal["content", "intelligence", "outbound", "engagement", "ops"]
+Category = Literal["content", "intelligence", "outbound", "engagement", "ops", "meta", "mbt"]
 
 # Only the categories we currently use. Easy to add more later.
 CATEGORIES: dict[str, dict] = {
@@ -29,6 +29,14 @@ CATEGORIES: dict[str, dict] = {
     "ops": {
         "label": "Operations",
         "description": "Site/fleet health, SEO, and guardrails. Runs in the background so the operator can stay an observer.",
+    },
+    "meta": {
+        "label": "Meta / Self-improvement",
+        "description": "Agents that analyse and improve the operator's own workflow — prompt patterns, tool usage, efficiency diagnostics.",
+    },
+    "mbt": {
+        "label": "MBT — Meet by Travel",
+        "description": "Creator discovery + outreach drafting for Meetbytravel.com. A separate venture from the personal-brand content pillars, grouped on its own here.",
     },
 }
 
@@ -442,6 +450,45 @@ FLEET: tuple[FleetEntry, ...] = (
         ),
     ),
     FleetEntry(
+        name="prompt_analyst",
+        label="Prompt Analyst",
+        short_description="Weekly coaching report on your Claude Code prompt patterns — efficiency diagnosis, category breakdown, action plan",
+        description=(
+            "Meta agent that reads your Claude Code session JSONL files (~/.claude/projects/*/  *.jsonl), "
+            "extracts every user message from the last N weeks, classifies each into a category "
+            "(feature request, bug report, question, vague instruction, approval, correction, scope creep, "
+            "context dump), and asks Claude to produce a coaching report. The report includes: executive "
+            "summary, week-by-week metric table, top inefficiencies with before/after rewrites, "
+            "practices to keep, and a numbered action plan. Run via CLI or the Indra dashboard."
+        ),
+        built=True,
+        production_status="",
+        runtime="local (Indra dashboard + CLI)",
+        category="meta",
+        workflow=(
+            "Scan ~/.claude/projects/*/  *.jsonl for user messages in the last N weeks",
+            "Classify each message: feature_request | bug_report | question | vague | correction | approval | scope_creep | context_dump",
+            "Aggregate weekly counts, avg length, per-project breakdown, length distribution",
+            "Single Claude call: produce a prompt-efficiency coaching report with before/after examples",
+            "Save as outputs/prompt_analyst/<timestamp>-coaching-report.md",
+        ),
+        inputs=(
+            "--weeks N (default 4) — how many weeks to look back",
+            "~/.claude/projects/*/  *.jsonl — Claude Code session JSONL files (read-only)",
+            "ANTHROPIC_API_KEY — for the Claude coaching call",
+        ),
+        outputs=(
+            "outputs/prompt_analyst/<timestamp>-coaching-report.md — full markdown coaching report",
+            "Artifact row surfaced in Indra at /agent/prompt_analyst",
+        ),
+        rationale=(
+            "The fastest way to get better at prompting is to see your own patterns diagnosed "
+            "objectively. Reading JSONL files is free and instant. One Claude call turns raw "
+            "category counts into actionable coaching — before/after rewrites, what to stop, "
+            "what to keep. Tracks week-over-week so improvement is measurable."
+        ),
+    ),
+    FleetEntry(
         name="fleet_health_monitor",
         label="Fleet health monitor",
         short_description="Daily 04:30 UTC sweep of every other agent — emails operator if anything goes red",
@@ -485,6 +532,54 @@ FLEET: tuple[FleetEntry, ...] = (
             "to be trustable, silent failures must be detected automatically. This is the "
             "guardrail layer: every other agent gets one daily check, and the operator only "
             "gets a notification when action is required."
+        ),
+    ),
+    FleetEntry(
+        name="mbt_creator_outreach",
+        label="MBT creator outreach",
+        short_description="Daily-discovered European travel micro-influencers, scored + drafted DM/email — review here before sending manually",
+        description=(
+            "Review console for the 'Travel Creator Discovery - Meetbytravel' n8n workflow "
+            "(runs daily 9am on n8n Cloud, workflow ID EkoKty8IfnIXgVYA). That workflow already "
+            "does the full pipeline: generates Google search queries for German/European travel "
+            "micro-influencers, extracts real profiles from search results via Claude, verifies "
+            "follower counts (ideal 1K-10K), dedupes against previously-seen creators, scores each "
+            "on travel relevance / Europe fit / hosts-trips evidence / professionalism / confidence, "
+            "and drafts a DM + email for the top 10 shortlisted each day — all written to a shared "
+            "Google Sheet. Indra reads that sheet (via a small read-only companion n8n webhook, "
+            "'MBT Sheet Reader - Indra', created 2026-07-28 to reuse the workflow's existing Google "
+            "credential without new setup) and surfaces today's shortlist with full draft copy so "
+            "the operator can copy-paste and send manually. No auto-send — outreach status "
+            "(contacted / skipped) is tracked locally in Indra only, never written back to the sheet "
+            "or sent automatically."
+        ),
+        built=True,
+        production_status="live",
+        runtime="n8n Cloud (discovery + scoring + drafting) + Indra (review console, local status only)",
+        category="mbt",
+        workflow=(
+            "n8n: daily 9am trigger — rotate 3 of 30 pre-written search queries",
+            "n8n: Google Search (Serper) → Claude extracts real IG/TikTok profiles from results",
+            "n8n: Serper follower lookup, filter to 1K-50K range (ideal 1K-10K)",
+            "n8n: dedupe against previously-seen usernames in the sheet",
+            "n8n: Claude scores each on travel_relevance/europe_specificity/hosts_trips/professionalism/confidence → composite_score, keep top 10",
+            "n8n: Claude drafts a DM (≤300 chars) + email subject/body per creator",
+            "n8n: writes full rows to the shared Google Sheet",
+            "Indra: pulls the sheet via the read-only 'MBT Sheet Reader' webhook, overlays local contacted/skipped status, renders the console",
+        ),
+        inputs=(
+            "MBT_SHEET_WEBHOOK_URL in .env — the companion n8n webhook that reads the Google Sheet",
+            "(No inputs on the Indra side beyond that — discovery/scoring/drafting all happens in n8n)",
+        ),
+        outputs=(
+            "Console at /agent/mbt_creator_outreach — today's + recent shortlist with score, bio, DM draft, email draft",
+            "Local 'contacted' / 'skipped' status per username, tracked in Indra's own SQLite (data/status.db), independent of the sheet",
+        ),
+        rationale=(
+            "The n8n workflow already does discovery, verification, scoring, and drafting end to "
+            "end — duplicating that in Indra would be wasted Claude spend. Indra's job is purely "
+            "to be the place the operator reviews today's shortlist and copies the draft to send "
+            "by hand, honoring the fleet's no-auto-send-on-social non-negotiable."
         ),
     ),
 )

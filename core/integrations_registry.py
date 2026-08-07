@@ -136,24 +136,14 @@ INTEGRATIONS: tuple[Integration, ...] = (
         ),
     ),
     Integration(
-        name="gold-api.com",
+        name="GoodReturns.in",
         kind="data_source",
-        purpose="Live XAU/XAG (gold/silver) spot prices in USD for the gold-rates page.",
+        purpose="Live India gold & silver rates (24K/22K/18K, national + 15 cities) scraped on each dashboard load.",
         status="live",
         cost="free, keyless",
         used_by=("gold_rates",),
-        docs_url="https://gold-api.com",
-        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on $SITE_BASE_URL, not by this fleet directly. No API key or auth needed.",
-    ),
-    Integration(
-        name="frankfurter.dev",
-        kind="data_source",
-        purpose="USD-INR exchange rate used to convert international gold/silver spot prices into India rates.",
-        status="live",
-        cost="free, keyless",
-        used_by=("gold_rates",),
-        docs_url="https://frankfurter.dev",
-        notes="Called by the daily Vercel Cron (api/gold-rates-cron.js) on $SITE_BASE_URL, not by this fleet directly. No API key required.",
+        docs_url="https://www.goodreturns.in/gold-rates/",
+        notes="Primary source for the gold rates console. Scraped live (60s cache). Rates match the widely-trusted GoodReturns figures used by Indian jewellers. Falls back to GOLD_RATES_GIST if scrape fails.",
     ),
     Integration(
         name="Brevo",
@@ -165,6 +155,23 @@ INTEGRATIONS: tuple[Integration, ...] = (
         used_by=("gold_rates",),
         docs_url="https://developers.brevo.com",
         notes="Alert sends + list signups happen from $SITE_BASE_URL's Vercel functions; this dashboard only reads the subscriber count for /agent/gold_rates. Both sides no-op gracefully if unset.",
+    ),
+    Integration(
+        name="MBT Sheet Reader (n8n webhook)",
+        kind="automation",
+        purpose="Read-only webhook Indra polls to pull the daily MBT creator shortlist + outreach drafts from the shared Google Sheet.",
+        status="live",
+        cost="free",
+        env_vars=("MBT_SHEET_WEBHOOK_URL",),
+        used_by=("mbt_creator_outreach",),
+        docs_url=os.getenv("N8N_API_BASE_URL", "https://app.n8n.cloud").replace("/api/v1", ""),
+        notes=(
+            "Small companion workflow ('MBT Sheet Reader - Indra', created 2026-07-28) sitting "
+            "alongside the 'Travel Creator Discovery - Meetbytravel' workflow. Reuses that "
+            "workflow's existing Google OAuth credential to read the Drive CSV file and return it "
+            "over a GET webhook — avoids needing a new Google API key or making the sheet public. "
+            "Read-only; never writes back to the sheet."
+        ),
     ),
     Integration(
         name="Postiz",

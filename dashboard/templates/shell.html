@@ -142,18 +142,24 @@
         </div>
         <span class="inline-block w-1.5 h-1.5 rounded-full bg-saffron-400 pulse-dot" title="live"></span>
       </div>
-      {% set lf = langfuse_status %}
-      <div class="mt-3 flex items-center gap-1.5 text-[10px]">
-        {% if lf.connected %}
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-saffron-400"></span>
-          <span class="text-zinc-400">Langfuse connected</span>
-        {% elif lf.configured %}
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-sindoor-400"></span>
-          <span class="text-zinc-400">Langfuse err</span>
-        {% else %}
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-midnight-700"></span>
-          <span class="text-zinc-500">Langfuse off</span>
-        {% endif %}
+      <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
+        {% for st in integration_states %}
+          {% set i = st.integration %}
+          {% if i.status == 'live' or st.live_check is not none %}
+            <div class="flex items-center gap-1 text-[10px]" title="{{ i.name }} — {{ i.status }}{% if st.live_check is sameas true %} (connected){% elif st.live_check is sameas false %} (ping failed){% endif %}">
+              {% if st.live_check is sameas true %}
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">{{ i.name | replace(' Cloud','') | replace(' API','') | replace('Meta Graph API (Instagram)','Meta IG') | replace('Claude Cloud Routines','Routines') | replace('Anthropic API','Claude') | truncate(12, true, '…') }}</span>
+              {% elif st.live_check is sameas false %}
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-sindoor-400"></span>
+                <span class="text-zinc-500">{{ i.name | replace(' Cloud','') | replace(' API','') | replace('Meta Graph API (Instagram)','Meta IG') | replace('Claude Cloud Routines','Routines') | replace('Anthropic API','Claude') | truncate(12, true, '…') }}</span>
+              {% else %}
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-saffron-400"></span>
+                <span class="text-zinc-400">{{ i.name | replace(' Cloud','') | replace(' API','') | replace('Meta Graph API (Instagram)','Meta IG') | replace('Claude Cloud Routines','Routines') | replace('Anthropic API','Claude') | truncate(12, true, '…') }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
       </div>
     </div>
 

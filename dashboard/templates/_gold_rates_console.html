@@ -1,8 +1,6 @@
 {# Gold & Silver Rates console.
-   Reads the daily price snapshot from the public GOLD_RATES_GIST (written by
-   api/gold-rates-cron.js on manikumarjami.com), plus Gold & Silver Alerts
-   subscriber count from Brevo and recent >5% alert sends from the private
-   queue Gist. #}
+   Scrapes live from goodreturns.in (primary) with Gist fallback, plus
+   Gold & Silver Alerts subscriber count from Brevo and recent alert sends. #}
 {% set G = gold %}
 {% set S = G.snapshot %}
 
@@ -12,25 +10,25 @@
       <div class="flex items-center gap-2 mb-1.5">
         {% if G.configured %}
           <span class="pill" style="background:rgba(0,230,118,.12);border:1px solid rgba(0,230,118,.3);color:#00e676;">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>LIVE · Vercel Cron + Brevo
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>LIVE · GoodReturns{% if S and S.source %} · {{ S.source }}{% endif %}
           </span>
         {% else %}
           <span class="pill pill-roadmap">not configured</span>
         {% endif %}
-        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">manikumarjami.com/gold-rates</span>
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">goodreturns.in → indra</span>
       </div>
       <h1 class="display-serif page-title text-2xl text-ivory">Gold &amp; Silver Rates</h1>
       <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">
-        Daily India gold &amp; silver rates (24K/22K/18K gold + silver, national + 15 cities) with
-        an international comparison. A Vercel Cron refreshes the snapshot once a day and emails the
-        <span class="text-emerald-400 font-mono">Gold &amp; Silver Alerts</span> list whenever either
-        metal moves more than 5% day-over-day.
+        Live India gold &amp; silver rates (24K/22K/18K gold + silver, national + 15 cities) scraped
+        from <span class="text-emerald-400 font-mono">GoodReturns.in</span>. Refreshed every 60s on
+        page load. Emails the <span class="text-emerald-400 font-mono">Gold &amp; Silver Alerts</span>
+        list whenever either metal moves more than 5% day-over-day.
       </p>
     </div>
     <div class="flex flex-col items-end gap-2 shrink-0">
-      <a href="https://manikumarjami.com/gold-rates" target="_blank" class="text-xs text-emerald-400 hover:text-emerald-300 transition">Open /gold-rates &#8599;</a>
+      <a href="https://www.goodreturns.in/gold-rates/" target="_blank" class="text-xs text-emerald-400 hover:text-emerald-300 transition">GoodReturns &#8599;</a>
       {% if S %}
-        <span class="text-[11px] text-zinc-600 font-mono">snapshot: {{ S.date }}</span>
+        <span class="text-[11px] text-zinc-600 font-mono">{{ S.date }}</span>
       {% endif %}
     </div>
   </div>
@@ -89,12 +87,12 @@
           <div class="grid grid-cols-[1fr_110px_110px] gap-2 items-center py-2">
             <span class="text-[12px] text-ivory">{{ c.name }}</span>
             <span class="text-[12px] text-zinc-300 font-mono text-right">₹{{ "%.0f"|format(c.gold['24k_per_10g']) }}</span>
-            <span class="text-[12px] text-zinc-300 font-mono text-right">₹{{ "%.0f"|format(c.silver.per_kg) }}</span>
+            <span class="text-[12px] text-zinc-300 font-mono text-right">{% if c.silver.per_kg %}₹{{ "%.0f"|format(c.silver.per_kg) }}{% else %}—{% endif %}</span>
           </div>
         {% endfor %}
       </div>
     {% else %}
-      <p class="text-xs text-zinc-600">No snapshot yet. The Vercel cron writes gold_rates_latest.json daily at 06:00 IST.</p>
+      <p class="text-xs text-zinc-600">No rates data yet — GoodReturns scrape may have failed. Try refreshing.</p>
     {% endif %}
     {% if G.error %}
       <p class="text-[11px] text-sindoor-400 mt-4 italic">{{ G.error }}</p>
@@ -103,26 +101,26 @@
 
   <!-- International + alert history -->
   <div class="card p-5 lg:col-span-2">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">International</h2>
-    </div>
-    {% if S %}
-      <div class="space-y-2 mb-5">
-        <div class="flex items-baseline justify-between">
-          <span class="text-[12px] text-zinc-400">XAU (gold) / oz</span>
-          <span class="text-[12px] text-ivory font-mono">${{ S.international.xau_usd_per_oz }}</span>
+    {% if S and S.international and S.international.xau_usd_per_oz %}
+      <div class="mb-5">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 class="text-[10px] uppercase tracking-widest text-saffron-600/80">International</h2>
         </div>
-        <div class="flex items-baseline justify-between">
-          <span class="text-[12px] text-zinc-400">XAG (silver) / oz</span>
-          <span class="text-[12px] text-ivory font-mono">${{ S.international.xag_usd_per_oz }}</span>
-        </div>
-        <div class="flex items-baseline justify-between">
-          <span class="text-[12px] text-zinc-400">USD / INR</span>
-          <span class="text-[12px] text-ivory font-mono">₹{{ S.international.usd_inr }}</span>
+        <div class="space-y-2">
+          <div class="flex items-baseline justify-between">
+            <span class="text-[12px] text-zinc-400">XAU (gold) / oz</span>
+            <span class="text-[12px] text-ivory font-mono">${{ S.international.xau_usd_per_oz }}</span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-[12px] text-zinc-400">XAG (silver) / oz</span>
+            <span class="text-[12px] text-ivory font-mono">${{ S.international.xag_usd_per_oz }}</span>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-[12px] text-zinc-400">USD / INR</span>
+            <span class="text-[12px] text-ivory font-mono">₹{{ S.international.usd_inr }}</span>
+          </div>
         </div>
       </div>
-    {% else %}
-      <p class="text-xs text-zinc-600 mb-5">No snapshot yet.</p>
     {% endif %}
 
     <div class="flex items-baseline justify-between mb-2">
@@ -131,12 +129,13 @@
     {% if G.alert_history %}
       <div class="divide-y divide-midnight-800">
         {% for a in G.alert_history %}
-          {% set tint = '#34d399' if a.change_pct >= 0 else '#f06b5e' %}
+          {% set cpct = a.get('change_pct', 0) if a.get is defined else (a['change_pct'] if 'change_pct' in a else 0) %}
+          {% set tint = '#34d399' if cpct >= 0 else '#f06b5e' %}
           <div class="flex items-center justify-between py-2">
-            <span class="text-[12px] text-ivory capitalize">{{ a.metal }}</span>
-            <span class="text-[11px] font-mono" style="color:{{ tint }}">{{ "%+.2f"|format(a.change_pct) }}%</span>
-            <span class="text-[11px] text-zinc-500">{{ a.recipients }} sent</span>
-            <span class="text-[11px] text-zinc-600">{{ a.sent_at[:10] }}</span>
+            <span class="text-[12px] text-ivory capitalize">{{ a.get('metal', '—') if a.get is defined else a.metal if a.metal is defined else '—' }}</span>
+            <span class="text-[11px] font-mono" style="color:{{ tint }}">{{ "%+.2f"|format(cpct) }}%</span>
+            <span class="text-[11px] text-zinc-500">{{ a.get('recipients', '—') if a.get is defined else '—' }} sent</span>
+            <span class="text-[11px] text-zinc-600">{{ (a.get('sent_at', '') if a.get is defined else '')[:10] }}</span>
           </div>
         {% endfor %}
       </div>

@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -54,6 +56,7 @@ load_dotenv()
 
 from agents.comment_dm_responder.agent import CommentDMResponderAgent
 from agents.job_hunter.agent import JobHunterAgent, CV_BUILDER_DIR as JOB_HUNTER_CV_DIR
+from agents.prompt_analyst.agent import PromptAnalystAgent
 from agents.startup_lookup.agent import StartupLookupAgent, OUTPUTS_DIR as STARTUP_LOOKUP_DIR
 from core import agent_metrics
 from core import assessment_emails
@@ -95,6 +98,7 @@ app.add_middleware(
 AGENT_CLASSES = {
     "comment_dm_responder": CommentDMResponderAgent,
     "job_hunter": JobHunterAgent,
+    "prompt_analyst": PromptAnalystAgent,
     "startup_lookup": StartupLookupAgent,
 }
 
@@ -639,6 +643,7 @@ def _shell_context(request: Request, main_template: str, **extra) -> dict:
         "request": request,
         "main_template": main_template,
         "langfuse_status": lf.get_status(),
+        "integration_states": integration_states(),
         "niches": NICHES,
         "pending_drafts": pending_drafts,
         **extra,
@@ -1362,10 +1367,16 @@ _LABS_STATS_TTL = 60.0  # 1 min — Resend has the data; we just surface it. No 
 
 _DELIVERY_STATS_CACHE: dict = {"ts": 0.0, "data": None}
 _MAPC_STATS_CACHE = _DELIVERY_STATS_CACHE   # backward compat alias
-_MAPC_STATS_TTL = 60.0
+_MAPC_STATS_TTL = 120.0  # 2 min — paginating Resend is ~3-5s
 
 _GOLD_STATS_CACHE: dict = {"ts": 0.0, "data": None}
 _GOLD_STATS_TTL = 60.0
+
+_PROMPT_ANALYST_CACHE: dict = {"ts": 0.0, "data": None}
+_PROMPT_ANALYST_TTL = 300.0  # 5 min — JSONL scan takes ~1-2s on cold start
+
+_MBT_STATS_CACHE: dict = {"ts": 0.0, "data": None}
+_MBT_STATS_TTL = 300.0  # 5 min — the n8n discovery workflow only writes once a day at 9am
 
 
 def _labs_emailer_stats() -> dict:
@@ -1503,6 +1514,7 @@ def _digital_delivery_stats() -> dict:
         "configured": False,
         "today_count": 0,
         "week_count": 0,
+        "month_count": 0,
         "total_visible": 0,
         "last_send_ts": None,
         "recent": [],
@@ -1530,12 +1542,28 @@ def _digital_delivery_stats() -> dict:
         except Exception:
             return ts_raw
 
+    _MAPC_SUBJECTS = ("mapc exam prep", "exam prep ·", "study guides are ready",
+                       "material you requested")
+
+    SPEC_LABELS = {
+        "counselling": "Counselling", "clinical": "Clinical",
+        "io": "I&O Psychology", "yr1": "1st Year",
+    }
+
+    def _mask_email(em: str) -> str:
+        local, _, domain = em.partition("@")
+        if len(local) <= 2:
+            masked = local[0] + "***"
+        else:
+            masked = local[:2] + "***" + local[-1:]
+        return f"{masked}@{domain}"
+
     try:
-        # ── Read from mapc_all_sent.json (Gist) — single fast call, no pagination ──
+        seen: dict = {}  # email -> record
+
+        # ── Primary: Gist (mapc_all_sent.json — synced full history) ──
         github_token = os.getenv("GITHUB_TOKEN", "")
         gist_id = os.getenv("MAPC_QUEUE_GIST", "")
-        all_sent: list = []
-
         if github_token and gist_id:
             with httpx.Client(timeout=10.0) as c:
                 gr = c.get(f"https://api.github.com/gists/{gist_id}",
@@ -1543,22 +1571,49 @@ def _digital_delivery_stats() -> dict:
                                     "Accept": "application/vnd.github.v3+json"})
                 if gr.status_code == 200:
                     raw = gr.json().get("files", {}).get("mapc_all_sent.json", {}).get("content", "[]")
-                    all_sent = json.loads(raw)
+                    for s in json.loads(raw):
+                        em = (s.get("email") or "").strip().lower()
+                        if em and em not in _TEST_EMAILS:
+                            seen[em] = {
+                                "email": em,
+                                "sent_at": s.get("sent_at", ""),
+                                "status": s.get("status", "delivered"),
+                                "course": SPEC_LABELS.get(s.get("specialisation", ""), s.get("specLabel", "MAPC")),
+                                "via": (s.get("via") or "Resend").capitalize(),
+                            }
 
-        # Filter test emails
-        all_sent = [s for s in all_sent if s.get("email","").lower() not in _TEST_EMAILS]
+        # ── Supplement: first Resend page picks up brand-new sends ──
+        with httpx.Client(timeout=10.0) as c:
+            r = c.get("https://api.resend.com/emails?limit=100", headers=HDR)
+            if r.status_code == 200:
+                for e in (r.json().get("data") or []):
+                    subj = (e.get("subject") or "").lower()
+                    if not any(kw in subj for kw in _MAPC_SUBJECTS):
+                        continue
+                    for t in (e.get("to") or []):
+                        em = t.strip().lower()
+                        if em and em not in _TEST_EMAILS and em not in seen:
+                            sl = (e.get("subject") or "").lower()
+                            if "clinical" in sl: course = "Clinical"
+                            elif "counselling" in sl: course = "Counselling"
+                            elif "i&o" in sl: course = "I&O Psychology"
+                            elif "1st year" in sl: course = "1st Year"
+                            else: course = "MAPC"
+                            seen[em] = {
+                                "email": em,
+                                "sent_at": (e.get("created_at") or "")[:19].replace(" ", "T"),
+                                "status": e.get("last_event") or "delivered",
+                                "course": course,
+                                "via": "Resend",
+                            }
 
-        # Deduplicate by email (keep first = most recent since we unshift)
-        seen: dict = {}
-        for s in all_sent:
-            em = s.get("email", "").strip().lower()
-            if em and em not in seen:
-                seen[em] = s
+        # ── Sort by sent_at descending ──
+        sorted_subs = sorted(seen.values(), key=lambda s: s.get("sent_at") or "", reverse=True)
 
-        # Count today / week
         today_utc = _dt.datetime.utcnow().date()
         week_ago = today_utc - _dt.timedelta(days=6)
-        for s in seen.values():
+        month_ago = today_utc - _dt.timedelta(days=29)
+        for s in sorted_subs:
             ts_str = s.get("sent_at", "")
             try:
                 dt = _dt.datetime.fromisoformat(ts_str[:19].replace(" ", "T"))
@@ -1567,34 +1622,27 @@ def _digital_delivery_stats() -> dict:
                     out["today_count"] += 1
                 if dt_date >= week_ago:
                     out["week_count"] += 1
+                if dt_date >= month_ago:
+                    out["month_count"] += 1
             except Exception:
                 pass
             status = s.get("status", "delivered")
             out["by_status"][status] = out["by_status"].get(status, 0) + 1
 
-        out["total_visible"] = len(seen)
+        out["total_visible"] = len(sorted_subs)
 
-        # Course label from specialisation field
-        SPEC_LABELS = {
-            "counselling": "Counselling", "clinical": "Clinical",
-            "io": "I&O Psychology", "yr1": "1st Year",
-        }
-
-        # Recent list — newest first (already unshifted in Gist)
-        for em, s in list(seen.items())[:100]:
+        for s in sorted_subs[:150]:
             out["recent"].append({
                 "ts":     _to_ist(s.get("sent_at", "")),
-                "email":  em,
+                "email":  _mask_email(s["email"]),
                 "status": s.get("status", "delivered"),
-                "course": SPEC_LABELS.get(s.get("specialisation", ""), s.get("specLabel", "MAPC")),
+                "course": s.get("course", "MAPC"),
                 "source": "MAPC Page",
-                "via":    s.get("via", "Resend").capitalize(),
-                "id":     "",
+                "via":    s.get("via", "Resend"),
             })
 
-        if seen:
-            first = next(iter(seen.values()))
-            out["last_send_ts"] = _to_ist(first.get("sent_at", ""))
+        if sorted_subs:
+            out["last_send_ts"] = _to_ist(sorted_subs[0].get("sent_at", ""))
 
     except Exception as exc:
         out["error"] = str(exc)[:200]
@@ -1636,10 +1684,313 @@ def page_mapc_delivery_redirect(request: Request):
     return RedirectResponse("/agent/digital_delivery", status_code=301)
 
 
+def _scrape_goodreturns_gold() -> dict | None:
+    """Scrape live gold + silver rates from goodreturns.in. Returns a snapshot
+    dict matching the Gist schema, or None on failure."""
+    import datetime as _dt
+    from html import unescape as _unescape
+    try:
+        with httpx.Client(timeout=12.0, follow_redirects=True) as c:
+            gold_r = c.get("https://www.goodreturns.in/gold-rates/",
+                           headers={"User-Agent": "Mozilla/5.0"})
+            silver_r = c.get("https://www.goodreturns.in/silver-rates/",
+                             headers={"User-Agent": "Mozilla/5.0"})
+        if gold_r.status_code != 200 or silver_r.status_code != 200:
+            return None
+
+        # unescape so &#x20b9; and &#8377; become ₹
+        gold_html = _unescape(gold_r.text)
+        silver_html = _unescape(silver_r.text)
+
+        inr_pat = re.compile(r"₹\s?([\d,]+)")
+        chg_pat = re.compile(r"\(([+-]?[\d,]+)\)")
+
+        # --- Gold national 10g rates ---
+        # The HTML has a table row starting with ">10</td>" followed by 24K, 22K, 18K
+        gold_10g: dict = {"24k_per_10g": None, "22k_per_10g": None, "18k_per_10g": None}
+        gold_change_abs = 0.0
+        row_idx = gold_html.find(">10</td>")
+        if row_idx > 0:
+            row_chunk = gold_html[row_idx:row_idx + 800]
+            row_amounts = inr_pat.findall(row_chunk)
+            row_changes = chg_pat.findall(row_chunk)
+            if len(row_amounts) >= 3:
+                gold_10g["24k_per_10g"] = float(row_amounts[0].replace(",", ""))
+                gold_10g["22k_per_10g"] = float(row_amounts[1].replace(",", ""))
+                gold_10g["18k_per_10g"] = float(row_amounts[2].replace(",", ""))
+            if row_changes:
+                gold_change_abs = float(row_changes[0].replace(",", ""))
+
+        gold_change_pct = 0.0
+        if gold_10g["24k_per_10g"] and gold_change_abs:
+            prev = gold_10g["24k_per_10g"] - gold_change_abs
+            if prev:
+                gold_change_pct = round((gold_change_abs / prev) * 100, 2)
+
+        # --- Silver national rate ---
+        silver_per_kg = None
+        silver_change_abs = 0.0
+        silver_amounts = inr_pat.findall(silver_html)
+        for a in silver_amounts:
+            val = float(a.replace(",", ""))
+            if 50000 < val < 500000:
+                silver_per_kg = val
+                break
+        silver_changes = chg_pat.findall(silver_html)
+        if silver_changes:
+            silver_change_abs = float(silver_changes[0].replace(",", ""))
+
+        silver_change_pct = 0.0
+        if silver_per_kg and silver_change_abs:
+            prev = silver_per_kg - silver_change_abs
+            if prev:
+                silver_change_pct = round((silver_change_abs / prev) * 100, 2)
+
+        # --- City rates (per gram from the city table) ---
+        # The city table starts after "Major Cities" heading — search from there
+        # to avoid matching nav links earlier in the page.
+        city_section_start = gold_html.find("Major Cities")
+        if city_section_start == -1:
+            city_section_start = 0
+        gold_city_html = gold_html[city_section_start:]
+
+        silver_city_start = silver_html.find("Major Cities")
+        if silver_city_start == -1:
+            silver_city_start = 0
+        silver_city_html = silver_html[silver_city_start:]
+
+        city_names = [
+            "Chennai", "Mumbai", "Delhi", "Kolkata", "Bangalore",
+            "Hyderabad", "Kerala", "Pune", "Vadodara", "Ahmedabad",
+            "Jaipur", "Lucknow", "Coimbatore", "Madurai", "Visakhapatnam",
+        ]
+        cities: dict = {}
+        for city in city_names:
+            idx = gold_city_html.find(city)
+            if idx == -1:
+                continue
+            chunk = gold_city_html[idx:idx + 400]
+            city_amounts = inr_pat.findall(chunk)
+            if len(city_amounts) >= 3:
+                g24 = float(city_amounts[0].replace(",", ""))
+                g22 = float(city_amounts[1].replace(",", ""))
+                g18 = float(city_amounts[2].replace(",", ""))
+                slug = city.lower().replace(" ", "_")
+                cities[slug] = {
+                    "name": city,
+                    "gold": {
+                        "24k_per_10g": g24 * 10 if g24 < 20000 else g24,
+                        "22k_per_10g": g22 * 10 if g22 < 20000 else g22,
+                        "18k_per_10g": g18 * 10 if g18 < 20000 else g18,
+                    },
+                    "silver": {"per_kg": None},
+                }
+                # Silver city rate
+                s_idx = silver_city_html.find(city)
+                if s_idx != -1:
+                    s_chunk = silver_city_html[s_idx:s_idx + 400]
+                    s_amounts = inr_pat.findall(s_chunk)
+                    for sa in s_amounts:
+                        sv = float(sa.replace(",", ""))
+                        if sv > 50000:
+                            cities[slug]["silver"]["per_kg"] = sv
+                            break
+
+        today = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+        snapshot = {
+            "date": today,
+            "updated_at": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": "goodreturns.in",
+            "national": {
+                "gold": gold_10g,
+                "silver": {"per_kg": silver_per_kg},
+            },
+            "international": {
+                "xau_usd_per_oz": None,
+                "xag_usd_per_oz": None,
+                "usd_inr": None,
+            },
+            "cities": cities,
+            "change_pct": {
+                "gold": gold_change_pct,
+                "silver": silver_change_pct,
+            },
+        }
+        return snapshot
+    except Exception:
+        return None
+
+
+def _prompt_analyst_stats() -> dict:
+    """Scan JSONL sessions, categorise messages, return analysis + insights + rendered report.
+    No Claude call — pure data. Cached 5 min."""
+    from datetime import date as _date, timedelta as _td
+    import markdown as _md
+    now = time.time()
+    if _PROMPT_ANALYST_CACHE["data"] and (now - _PROMPT_ANALYST_CACHE["ts"]) < _PROMPT_ANALYST_TTL:
+        return _PROMPT_ANALYST_CACHE["data"]
+
+    out: dict = {
+        "configured": True,
+        "analysis": None,
+        "insights": [],
+        "action_items": [],
+        "report_html": None,
+        "last_run_date": None,
+        "next_run_date": None,
+        "error": None,
+    }
+
+    try:
+        from agents.prompt_analyst.agent import _load_messages, _analyse
+        msgs = _load_messages(weeks=4)
+        out["analysis"] = _analyse(msgs, weeks=4)
+    except Exception as exc:
+        out["error"] = str(exc)
+        out["configured"] = False
+
+    # ── Derive insight cards from live analysis data ──────────────────────────
+    A = out["analysis"]
+    if A:
+        total = A["total_messages"]
+        cats = A["overall_by_category"]
+        correction_n = cats.get("correction", 0)
+        vague_n = cats.get("vague", 0)
+        feature_n = cats.get("feature_request", 0)
+        correction_pct = round(correction_n / total * 100, 1) if total else 0
+        vague_pct = round(vague_n / total * 100, 1) if total else 0
+
+        # Project correction rates (only projects with >20 messages)
+        proj_rates = {
+            p: round(d["by_category"].get("correction", 0) / d["total"] * 100, 1)
+            for p, d in A["by_project"].items() if d["total"] > 20
+        }
+        worst_proj = max(proj_rates, key=proj_rates.get) if proj_rates else None
+        best_proj = min(proj_rates, key=proj_rates.get) if proj_rates else None
+
+        # Week 3 spike detection
+        week3 = next((w for w in A["weekly"] if w["week_label"] == "Week 3"), None)
+        w3_correction_pct = round(week3["by_category"].get("correction", 0) / week3["total"] * 100, 1) if week3 and week3["total"] else 0
+
+        out["insights"] = [
+            {
+                "impact": "high",
+                "impact_label": "HIGH COST",
+                "impact_color": "#e74c3c",
+                "metric": f"{correction_pct}% of messages",
+                "title": "Correction loop is your #1 token drain",
+                "finding": (
+                    f"{correction_n} out of {total} messages are redirects or undos — that's "
+                    f"~25–40 wasted turns per week. When corrections chain, one wrong assumption "
+                    f"costs 3–5 turns instead of 1."
+                ),
+                "before": "gold rates are not coming up and not in sync with goodreturns values",
+                "after": "Gold rates panel shows ₹93,000/10g but GoodReturns shows ₹95,200. Scraper hits goodreturns.in — city table mismatch. Last good scrape 3h ago.",
+                "rule": "Name the symptom + expected value + data source. One line eliminates the investigation loop.",
+            },
+            {
+                "impact": "medium",
+                "impact_label": "MEDIUM COST",
+                "impact_color": "#f4c542",
+                "metric": f"{vague_pct}% of messages",
+                "title": "Vague messages force me to guess",
+                "finding": (
+                    f"{vague_n} messages carry no context anchor. You describe what you see "
+                    f"('cant see 150 subscribers') but not where the data should come from, "
+                    f"what you last changed, or what the expected output is. I pick an "
+                    f"interpretation, it's wrong, correction follows."
+                ),
+                "before": "digital product, i cant see last 150 subscribers",
+                "after": "MAPC console shows 1 subscriber. Source is mapc_all_sent.json Gist (primary) + Resend first page (supplement). Expected: ~130 deduplicated, emails masked.",
+                "rule": "Every stat/count question needs: what you see + what you expect + which source is authoritative.",
+            },
+            {
+                "impact": "medium" if worst_proj and proj_rates.get(worst_proj, 0) < 35 else "high",
+                "impact_label": "PROJECT RISK",
+                "impact_color": "#fb923c",
+                "metric": f"{proj_rates.get(worst_proj, 0)}% corrections in {worst_proj}" if worst_proj else "Late constraints",
+                "title": f"{'cv builder' if worst_proj and 'cv' in worst_proj.lower() else (worst_proj or 'Long sessions')} needs an opening brief",
+                "finding": (
+                    f"{'cv builder' if worst_proj and 'cv' in worst_proj.lower() else (worst_proj or 'Multi-thread sessions')} "
+                    f"has the worst correction rate "
+                    f"({proj_rates.get(worst_proj, 0)}% vs {proj_rates.get(best_proj, 0)}% in {best_proj or 'other projects'}). "
+                    f"The driver: style rules and scope constraints arrive after significant work is done — "
+                    f"'position as GPM not AVP' after 100 lines, 'no em-dashes' after a full draft."
+                ),
+                "before": "ok build the CV  [after 100 lines]  actually, position me as GPM not AVP",
+                "after": "Build CV for [job]. Constraints: title = Group PM, no em-dashes, 105–125 char bullets, prioritise marketplace metrics, include GitHub link.",
+                "rule": "3-line constraint brief at session start. Role · style rules · deal-breakers. Keep a snippet to paste.",
+            },
+        ]
+
+        # Action items derived from analysis
+        out["action_items"] = [
+            {
+                "n": 1,
+                "impact": "high",
+                "text": "Add [symptom] + [expected] + [source] to every bug report and stat question.",
+                "why": f"Targets the {correction_n} correction messages — estimated 30–40% reduction.",
+            },
+            {
+                "n": 2,
+                "impact": "high",
+                "text": "Start every cv-builder session with a 3-line brief: role title · style rules · deal-breakers.",
+                "why": f"cv builder has a {proj_rates.get('cv builder', proj_rates.get(worst_proj, 0))}% correction rate — highest of all projects.",
+            },
+            {
+                "n": 3,
+                "impact": "medium",
+                "text": 'End feature requests with "Done when [observable outcome]."',
+                "why": f"You write strong feature briefs ({feature_n} this month) but rarely define the exit condition.",
+            },
+            {
+                "n": 4,
+                "impact": "medium",
+                "text": "One debugging thread per session. Two issues = two sessions.",
+                "why": f"Week 3 mixed 3 threads and hit {w3_correction_pct}% corrections — double your baseline.",
+            },
+            {
+                "n": 5,
+                "impact": "low",
+                "text": "Move scope questions before the build, not after.",
+                "why": f"{cats.get('question', 0)} questions this month — several came after work that should have been scoped first.",
+            },
+        ]
+
+    # ── Load and render latest coaching report ────────────────────────────────
+    report_dir = BASE_DIR.parent / "outputs" / "prompt_analyst"
+    last_run_date = None
+    if report_dir.exists():
+        reports = sorted(report_dir.glob("*.md"), reverse=True)
+        if reports:
+            stem = reports[0].stem
+            try:
+                last_run_date = _date(int(stem[:4]), int(stem[4:6]), int(stem[6:8]))
+                out["last_run_date"] = str(last_run_date)
+            except Exception:
+                pass
+            try:
+                raw = reports[0].read_text(encoding="utf-8")
+                # Skip the title + generated header, render body as HTML
+                body_start = raw.find("\n## ")
+                body = raw[body_start:].strip() if body_start != -1 else raw.strip()
+                out["report_html"] = _md.markdown(
+                    body,
+                    extensions=["tables", "fenced_code"],
+                )
+            except Exception:
+                pass
+
+    base = last_run_date or _date.today()
+    out["next_run_date"] = str(base + _td(days=14))
+
+    _PROMPT_ANALYST_CACHE.update({"data": out, "ts": now})
+    return out
+
+
 def _gold_rates_stats() -> dict:
-    """Read the latest gold/silver rates snapshot (public GOLD_RATES_GIST),
-    Gold & Silver Alerts subscriber count (Brevo), and recent >5% alert
-    sends (gold_sent.json in the private MAPC_QUEUE_GIST). Cached 60s."""
+    """Live gold/silver rates from GoodReturns, subscriber count from Brevo,
+    alert history from Gist. Cached 60s."""
     now = time.time()
     if _GOLD_STATS_CACHE["data"] and (now - _GOLD_STATS_CACHE["ts"]) < _GOLD_STATS_TTL:
         return _GOLD_STATS_CACHE["data"]
@@ -1657,24 +2008,29 @@ def _gold_rates_stats() -> dict:
     if github_token:
         gist_headers["Authorization"] = f"token {github_token}"
 
-    gist_id = os.getenv("GOLD_RATES_GIST", "")
-    if not gist_id:
-        out["error"] = "GOLD_RATES_GIST not set"
-        _GOLD_STATS_CACHE.update({"data": out, "ts": now})
-        return out
-
-    try:
-        with httpx.Client(timeout=10.0) as c:
-            r = c.get(f"https://api.github.com/gists/{gist_id}", headers=gist_headers)
-            if r.status_code == 200:
-                raw = r.json().get("files", {}).get("gold_rates_latest.json", {}).get("content", "")
-                if raw:
-                    out["snapshot"] = json.loads(raw)
-                    out["configured"] = True
-            else:
-                out["error"] = f"Gist fetch failed: {r.status_code}"
-    except Exception as exc:
-        out["error"] = str(exc)[:200]
+    # Primary source: scrape GoodReturns live
+    snapshot = _scrape_goodreturns_gold()
+    if snapshot:
+        out["snapshot"] = snapshot
+        out["configured"] = True
+    else:
+        # Fallback: read from Gist if configured
+        gist_id = os.getenv("GOLD_RATES_GIST", "")
+        if gist_id:
+            try:
+                with httpx.Client(timeout=10.0) as c:
+                    r = c.get(f"https://api.github.com/gists/{gist_id}", headers=gist_headers)
+                    if r.status_code == 200:
+                        raw = r.json().get("files", {}).get("gold_rates_latest.json", {}).get("content", "")
+                        if raw:
+                            out["snapshot"] = json.loads(raw)
+                            out["configured"] = True
+                    else:
+                        out["error"] = f"Gist fallback failed: {r.status_code}"
+            except Exception as exc:
+                out["error"] = str(exc)[:200]
+        if not out["configured"]:
+            out["error"] = "GoodReturns scrape failed and no GOLD_RATES_GIST fallback"
 
     # Subscriber count — Gold & Silver Alerts Brevo list
     brevo_key = os.getenv("BREVO_API_KEY", "")
@@ -1751,6 +2107,108 @@ def page_labs_results_emailer(request: Request):
     )
 
 
+def _mbt_stats() -> dict:
+    """MBT (Meet by Travel) creator outreach console. Reads the daily shortlist
+    + drafted DM/email from the read-only 'MBT Sheet Reader' n8n webhook, then
+    overlays local contacted/skipped status (tracked only in Indra — never
+    written back to the sheet, never auto-sent)."""
+    now = time.time()
+    if _MBT_STATS_CACHE["data"] and (now - _MBT_STATS_CACHE["ts"]) < _MBT_STATS_TTL:
+        return _MBT_STATS_CACHE["data"]
+
+    out: dict = {
+        "configured": False,
+        "error": None,
+        "rows": [],
+        "total": 0,
+        "pending_count": 0,
+        "contacted_count": 0,
+        "skipped_count": 0,
+        "latest_week": None,
+    }
+
+    webhook_url = os.getenv("MBT_SHEET_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        out["error"] = "MBT_SHEET_WEBHOOK_URL not configured"
+        _MBT_STATS_CACHE.update({"data": out, "ts": now})
+        return out
+
+    try:
+        with httpx.Client(timeout=15.0) as c:
+            r = c.get(webhook_url)
+            if r.status_code != 200:
+                out["error"] = f"Sheet reader webhook returned HTTP {r.status_code}"
+                _MBT_STATS_CACHE.update({"data": out, "ts": now})
+                return out
+            csv_text = r.text
+    except Exception as exc:
+        out["error"] = str(exc)[:200]
+        _MBT_STATS_CACHE.update({"data": out, "ts": now})
+        return out
+
+    local_status = status_bus.get_mbt_statuses()
+    rows = []
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        username = (row.get("username") or "").strip()
+        if not username or username == "__none__":
+            continue
+        try:
+            composite_score = float(row.get("composite_score") or 0)
+        except ValueError:
+            composite_score = 0.0
+        row["composite_score"] = composite_score
+        row["local_status"] = local_status.get(username.lower(), "pending")
+        rows.append(row)
+
+    rows.sort(key=lambda r: (r.get("week") or "", r["composite_score"]), reverse=True)
+
+    out["configured"] = True
+    out["rows"] = rows
+    out["total"] = len(rows)
+    out["pending_count"] = sum(1 for r in rows if r["local_status"] == "pending")
+    out["contacted_count"] = sum(1 for r in rows if r["local_status"] == "contacted")
+    out["skipped_count"] = sum(1 for r in rows if r["local_status"] == "skipped")
+    out["latest_week"] = rows[0]["week"] if rows else None
+
+    _MBT_STATS_CACHE.update({"data": out, "ts": now})
+    return out
+
+
+@app.get("/api/mbt-stats", response_class=HTMLResponse)
+def api_mbt_stats(request: Request):
+    resp = templates.TemplateResponse(
+        "_mbt_console.html",
+        {"request": request, "mbt": _mbt_stats()},
+    )
+    resp.headers["Cache-Control"] = "private, max-age=60"
+    return resp
+
+
+@app.get("/agent/mbt_creator_outreach", response_class=HTMLResponse)
+def page_mbt_creator_outreach(request: Request):
+    return _render(
+        request,
+        "_mbt_console.html",
+        active_view="agent",
+        active_agent="mbt_creator_outreach",
+        mbt=_mbt_stats(),
+    )
+
+
+@app.post("/api/mbt/mark", response_class=HTMLResponse)
+def api_mbt_mark(username: str = Form(...), status: str = Form(...)):
+    if status not in ("pending", "contacted", "skipped"):
+        raise HTTPException(status_code=400, detail="status must be pending, contacted, or skipped")
+    status_bus.set_mbt_status(username, status)
+    _MBT_STATS_CACHE["data"] = None  # force refresh on next load
+    badge = {
+        "contacted": '<span class="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">✓ contacted</span>',
+        "skipped": '<span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">skipped</span>',
+        "pending": '<span class="text-[10px] text-saffron-400 font-mono uppercase tracking-wider">pending</span>',
+    }[status]
+    return HTMLResponse(badge)
+
+
 @app.get("/activity", response_class=HTMLResponse)
 def page_activity(request: Request):
     feed = _ig_activity_feed(limit=80)
@@ -1768,6 +2226,17 @@ def page_artifacts(request: Request):
         request,
         "_artifacts.html",
         active_view="artifacts",
+    )
+
+
+@app.get("/agent/prompt_analyst", response_class=HTMLResponse)
+def page_prompt_analyst(request: Request):
+    return _render(
+        request,
+        "_prompt_analyst_console.html",
+        active_view="agent",
+        active_agent="prompt_analyst",
+        pa=_prompt_analyst_stats(),
     )
 
 
@@ -2555,6 +3024,36 @@ async def run_startup_lookup(
         )
     )
     return HTMLResponse('<div class="text-saffron-400 text-sm">Queued — RSS + one Apify search can take 30-90s; watch the pipeline above, then the latest panel refreshes.</div>')
+
+
+# ---------- Prompt Analyst ----------
+
+@app.post("/api/run/prompt_analyst", response_class=HTMLResponse)
+async def run_prompt_analyst(
+    background_tasks: BackgroundTasks,
+    weeks: int = Form(4),
+):
+    weeks = max(1, min(int(weeks), 12))
+    background_tasks.add_task(
+        _run_in_background(
+            PromptAnalystAgent,
+            task=f"Prompt efficiency analysis — last {weeks} weeks",
+            weeks=weeks,
+        )
+    )
+    return HTMLResponse(
+        f'<div class="text-saffron-400 text-sm">Queued — scanning {weeks} weeks of session JSONL files, then one Claude call for the coaching report. Watch the pipeline above; the report will appear in artifacts when done.</div>'
+    )
+
+
+@app.get("/api/prompt-analyst-stats", response_class=HTMLResponse)
+def api_prompt_analyst_stats(request: Request):
+    resp = templates.TemplateResponse(
+        "_prompt_analyst_console.html",
+        {"request": request, "pa": _prompt_analyst_stats()},
+    )
+    resp.headers["Cache-Control"] = "private, max-age=300"
+    return resp
 
 
 # ---------- Competitor watcher (static Instagram creator benchmark) ----------

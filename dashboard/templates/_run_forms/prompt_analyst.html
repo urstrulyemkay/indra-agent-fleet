@@ -1,0 +1,23 @@
+{# Run form: Prompt Analyst #}
+<form hx-post="/api/run/prompt_analyst"
+      hx-target="#run-result"
+      hx-swap="innerHTML"
+      class="space-y-4">
+
+  <div>
+    <label class="block text-[11px] uppercase tracking-wider text-zinc-500 mb-1.5">
+      Look-back window (weeks)
+    </label>
+    <input type="number" name="weeks" value="4" min="1" max="12"
+           class="input-field w-24" />
+    <p class="text-[10px] text-zinc-600 mt-1">How many weeks of Claude Code sessions to analyse. Max 12.</p>
+  </div>
+
+  <div class="pt-2">
+    <button type="submit"
+            class="btn-primary">
+      Run analysis
+    </button>
+  </div>
+
+</form>

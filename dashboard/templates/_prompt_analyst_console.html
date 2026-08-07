@@ -1,0 +1,380 @@
+{# Prompt Analyst console — weekly prompt efficiency metrics + coaching report viewer.
+   Template var: pa = _prompt_analyst_stats() #}
+{% set D = pa %}
+{% set A = D.analysis %}
+
+{# ── Category metadata ─────────────────────────────────────────────────────── #}
+{% set cat_colors = {
+  'feature_request': '#34d399',
+  'correction':      '#e74c3c',
+  'vague':           '#f4c542',
+  'question':        '#60a5fa',
+  'bug_report':      '#fb923c',
+  'approval':        '#6b7280',
+  'scope_creep':     '#a78bfa',
+  'context_dump':    '#475569',
+} %}
+{% set cat_labels = {
+  'feature_request': 'Feature request',
+  'correction':      'Correction / undo',
+  'vague':           'Vague instruction',
+  'question':        'Question',
+  'bug_report':      'Bug report',
+  'approval':        'Approval / confirm',
+  'scope_creep':     'Scope creep',
+  'context_dump':    'Context dump',
+} %}
+
+<!-- ── HEADER CARD ────────────────────────────────────────────────────────── -->
+<div class="card p-6 mb-6 relative overflow-hidden">
+  <div class="flex items-start gap-5">
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1.5">
+        {% if D.error %}
+          <span class="pill pill-roadmap">{{ D.error[:50] }}</span>
+        {% elif D.configured %}
+          <span class="pill" style="background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.28);color:#a78bfa;">
+            <span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span>LIVE · ~/.claude/projects
+          </span>
+        {% else %}
+          <span class="pill pill-roadmap">not configured</span>
+        {% endif %}
+        <span class="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">JSONL → categorise → coach</span>
+      </div>
+      <h1 class="display-serif page-title text-2xl text-ivory">Prompt Analyst</h1>
+      <p class="text-sm text-zinc-400 mt-3 max-w-2xl leading-relaxed">
+        Scans every Claude Code session across all projects for the last 4 weeks.
+        Classifies each message by type, tracks weekly efficiency metrics, and
+        generates a coaching report on demand. Scheduled every 2 weeks.
+      </p>
+    </div>
+    <div class="flex flex-col items-end gap-2 shrink-0 text-right">
+      {% if D.last_run_date %}
+        <div class="text-[11px] text-zinc-500 font-mono">Last run: {{ D.last_run_date }}</div>
+      {% else %}
+        <div class="text-[11px] text-zinc-600 font-mono">No report yet</div>
+      {% endif %}
+      {% if D.next_run_date %}
+        <div class="text-[11px] text-zinc-600 font-mono">Next: {{ D.next_run_date }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── KPI strip ── -->
+  {% if A %}
+    {% set total = A.total_messages %}
+    {% set correction_n = A.overall_by_category.get('correction', 0) %}
+    {% set vague_n = A.overall_by_category.get('vague', 0) %}
+    {% set feature_n = A.overall_by_category.get('feature_request', 0) %}
+    {% set correction_pct = (correction_n / total * 100) | round(0) | int if total else 0 %}
+    {% set vague_pct = (vague_n / total * 100) | round(0) | int if total else 0 %}
+    {% set feature_pct = (feature_n / total * 100) | round(0) | int if total else 0 %}
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-wider text-violet-400/70">Total messages (4w)</div>
+        <div class="display-serif text-2xl text-ivory mt-1">{{ total }}</div>
+        <div class="text-[10px] text-zinc-600 mt-0.5">{{ A.by_project | length }} projects</div>
+      </div>
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-wider text-sindoor-400/70">Correction rate</div>
+        <div class="display-serif text-2xl mt-1" style="color:{{ '#e74c3c' if correction_pct > 20 else '#f4c542' if correction_pct > 12 else '#34d399' }}">{{ correction_pct }}%</div>
+        <div class="text-[10px] text-zinc-600 mt-0.5">{{ correction_n }} redirects / undos</div>
+      </div>
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-wider text-saffron-600/70">Vague rate</div>
+        <div class="display-serif text-2xl mt-1" style="color:{{ '#e74c3c' if vague_pct > 20 else '#f4c542' if vague_pct > 12 else '#34d399' }}">{{ vague_pct }}%</div>
+        <div class="text-[10px] text-zinc-600 mt-0.5">{{ vague_n }} low-context messages</div>
+      </div>
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-4">
+        <div class="text-[10px] uppercase tracking-wider" style="color:rgba(52,211,153,.6)">Feature asks</div>
+        <div class="display-serif text-2xl text-emerald-400 mt-1">{{ feature_pct }}%</div>
+        <div class="text-[10px] text-zinc-600 mt-0.5">{{ A.avg_length_chars }}c avg length</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ── MAIN GRID ─────────────────────────────────────────────────────────── -->
+{% if A %}
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-5">
+
+  <!-- Category breakdown (left, 3 cols) -->
+  <div class="card p-5 lg:col-span-3">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70">Message categories — 4 weeks</h2>
+      <button hx-get="/api/prompt-analyst-stats" hx-target="closest section, main, #main-slot"
+              hx-push-url="false"
+              onclick="window.location.reload()"
+              class="text-[10px] text-zinc-600 hover:text-zinc-400 transition">&#8635; refresh</button>
+    </div>
+
+    {% set total = A.total_messages %}
+    {% set cats_ordered = ['feature_request','correction','vague','question','bug_report','scope_creep','approval','context_dump'] %}
+    <div class="space-y-3">
+      {% for cat in cats_ordered %}
+        {% set count = A.overall_by_category.get(cat, 0) %}
+        {% set pct = (count / total * 100) | round(1) if total else 0 %}
+        {% set color = cat_colors.get(cat, '#6b7280') %}
+        {% set label = cat_labels.get(cat, cat) %}
+        <div class="group">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[11px] text-zinc-300">{{ label }}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-mono text-zinc-400">{{ count }}</span>
+              <span class="text-[10px] font-mono text-zinc-600 w-8 text-right">{{ "%.0f"|format(pct) }}%</span>
+            </div>
+          </div>
+          <div class="w-full bg-midnight-800 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full transition-all duration-500"
+                 style="width:{{ pct }}%; background:{{ color }}; opacity:0.75;"></div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Efficiency score -->
+    {% set efficiency = A.overall_efficiency_score %}
+    <div class="mt-5 pt-4 border-t border-midnight-800">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-zinc-500">Prompt efficiency score (4w avg)</div>
+          <div class="text-[10px] text-zinc-600 mt-0.5">100 − correction% − vague%/2</div>
+        </div>
+        <div class="text-right">
+          <div class="display-serif text-3xl mt-0.5"
+               style="color:{{ '#34d399' if efficiency >= 70 else '#f4c542' if efficiency >= 55 else '#e74c3c' }}">
+            {{ efficiency }}
+          </div>
+          <div class="text-[10px] text-zinc-600">
+            {% if efficiency >= 70 %}good{% elif efficiency >= 55 %}needs work{% else %}high rework cost{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weekly trend (right, 2 cols) -->
+  <div class="card p-5 lg:col-span-2">
+    <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70 mb-4">Weekly volume</h2>
+
+    {% set max_total = A.weekly | map(attribute='total') | max %}
+    <div class="flex items-end gap-3 h-32 mb-3">
+      {% for w in A.weekly %}
+        {% set bar_pct = (w.total / max_total * 100) | round(0) | int if max_total else 0 %}
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="text-[10px] font-mono text-zinc-400">{{ w.total }}</div>
+          <div class="w-full flex flex-col justify-end" style="height:90px">
+            <div class="w-full rounded-t-sm"
+                 style="height:{{ bar_pct }}%; background:rgba(167,139,250,0.45); min-height:3px;"></div>
+          </div>
+          <div class="text-[9px] text-zinc-600 text-center leading-tight">{{ w.week_label }}</div>
+          <div class="text-[8px] text-zinc-700 text-center leading-tight font-mono">{{ w.date_range }}</div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Per-project breakdown -->
+    <div class="mt-4 pt-4 border-t border-midnight-800">
+      <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">By project</div>
+      {% set total = A.total_messages %}
+      {% for proj, pd in (A.by_project.items() | sort(attribute='1.total', reverse=true))[:5] %}
+        {% set pp = (pd.total / total * 100) | round(0) | int if total else 0 %}
+        <div class="flex items-center justify-between py-1 text-[11px]">
+          <span class="text-zinc-400 truncate max-w-[120px]" title="{{ proj }}">{{ proj }}</span>
+          <div class="flex items-center gap-2">
+            <div class="w-20 bg-midnight-800 rounded-full h-1">
+              <div class="h-1 rounded-full bg-violet-400/50" style="width:{{ pp }}%"></div>
+            </div>
+            <span class="text-zinc-600 font-mono w-8 text-right">{{ pd.total }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── WEEK-ON-WEEK EFFICIENCY SCORE ───────────────────────────────────── -->
+<div class="card p-5 mb-5">
+  <div class="flex items-baseline justify-between mb-4">
+    <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70">Week-on-week efficiency score</h2>
+    <div class="flex items-center gap-2">
+      {% if A.efficiency_trend is not none %}
+        {% set trend = A.efficiency_trend %}
+        <span class="text-[11px] font-mono" style="color:{{ '#34d399' if trend > 0 else '#e74c3c' if trend < 0 else '#6b7280' }}">
+          {{ '▲' if trend > 0 else '▼' if trend < 0 else '—' }} {{ trend | abs }} pts vs Week 1
+        </span>
+      {% endif %}
+      <span class="text-[10px] text-zinc-600">4-week avg: <span class="font-mono text-zinc-400">{{ A.overall_efficiency_score }}</span></span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-4 gap-4">
+    {% for w in A.weekly %}
+      {% set score = w.efficiency_score %}
+      {% set score_color = '#34d399' if score is not none and score >= 70 else '#f4c542' if score is not none and score >= 55 else '#e74c3c' %}
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-3.5">
+        <div class="flex items-baseline justify-between mb-2">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-zinc-500">{{ w.week_label }}</div>
+            <div class="text-[9px] text-zinc-600 font-mono">{{ w.date_range }}</div>
+          </div>
+          <div class="display-serif text-2xl" style="color:{{ score_color }}">{{ score if score is not none else '—' }}</div>
+        </div>
+        <div class="w-full bg-midnight-800 rounded-full h-1.5 mb-2.5">
+          <div class="h-1.5 rounded-full transition-all duration-500" style="width:{{ score if score is not none else 0 }}%; background:{{ score_color }};"></div>
+        </div>
+        <div class="flex items-center justify-between text-[9px] text-zinc-600">
+          <span>{{ w.total }} msgs</span>
+          <span style="color:{{ '#e74c3c' if w.correction_pct > 25 else '#f4c542' if w.correction_pct > 15 else '#34d399' }}">{{ w.correction_pct }}% correction</span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <p class="text-[10px] text-zinc-600 mt-3">
+    Score = 100 − correction% − vague%/2, computed per week. Higher is better; 70+ is healthy, below 55 means rework is eating most of your turns.
+  </p>
+</div>
+
+<!-- ── LENGTH DISTRIBUTION ──────────────────────────────────────────────── -->
+<div class="card p-5 mb-5">
+  <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70 mb-4">Message length distribution</h2>
+  <div class="grid grid-cols-5 gap-3">
+    {% set len_buckets = [
+      ('< 20c', A.length_distribution.get('under_20_chars', 0), 'one-liners / noise'),
+      ('20–100c', A.length_distribution.get('20_to_100', 0), 'short instructions'),
+      ('100–300c', A.length_distribution.get('100_to_300', 0), 'medium context'),
+      ('300–1k', A.length_distribution.get('300_to_1000', 0), 'detailed asks'),
+      ('> 1k', A.length_distribution.get('over_1000', 0), 'pastes / dumps'),
+    ] %}
+    {% set total = A.total_messages %}
+    {% for label, n, desc in len_buckets %}
+      {% set pct = (n / total * 100) | round(0) | int if total else 0 %}
+      <div class="bg-midnight-900/40 border border-midnight-800 rounded-lg p-3 text-center">
+        <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">{{ label }}</div>
+        <div class="display-serif text-xl text-ivory">{{ n }}</div>
+        <div class="text-[10px] text-zinc-600 mt-0.5">{{ pct }}%</div>
+        <div class="text-[9px] text-zinc-700 mt-1 leading-tight">{{ desc }}</div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="mt-3 text-[11px] text-zinc-600">
+    Avg message: <span class="text-zinc-400 font-mono">{{ A.avg_length_chars }}c</span> —
+    {% if A.avg_length_chars < 80 %}instructions are short; more context will reduce correction loops.
+    {% elif A.avg_length_chars < 250 %}healthy range; watch the vague% and correction% to tune further.
+    {% else %}good length; most messages carry context.{% endif %}
+  </div>
+</div>
+
+{% endif %}
+
+<!-- ── TOP FINDINGS — scannable insight cards ──────────────────────────── -->
+{% if D.insights %}
+<div class="mb-5">
+  <div class="flex items-baseline justify-between mb-3">
+    <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70">Top findings — ranked by cost</h2>
+    <span class="text-[10px] text-zinc-600">computed live from the data above</span>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    {% for ins in D.insights %}
+      <div class="card p-4 relative overflow-hidden" style="border-top:2px solid {{ ins.impact_color }};">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[9px] uppercase tracking-widest font-semibold" style="color:{{ ins.impact_color }}">{{ ins.impact_label }}</span>
+          <span class="text-[10px] font-mono text-zinc-500">{{ ins.metric }}</span>
+        </div>
+        <h3 class="text-sm text-ivory font-medium leading-snug mb-2">{{ ins.title }}</h3>
+        <p class="text-[12px] text-zinc-400 leading-relaxed mb-3">{{ ins.finding }}</p>
+
+        <div class="rounded-md bg-midnight-900/60 border border-midnight-800 p-2.5 mb-1.5">
+          <div class="text-[9px] uppercase tracking-wider text-sindoor-400/70 mb-1">Before</div>
+          <div class="text-[11px] text-zinc-500 italic leading-snug">"{{ ins.before }}"</div>
+        </div>
+        <div class="rounded-md bg-midnight-900/60 border border-emerald-900/40 p-2.5 mb-2.5">
+          <div class="text-[9px] uppercase tracking-wider text-emerald-400/70 mb-1">After</div>
+          <div class="text-[11px] text-zinc-300 italic leading-snug">"{{ ins.after }}"</div>
+        </div>
+
+        <div class="text-[10px] text-violet-300/80 leading-snug pt-2 border-t border-midnight-800">
+          <span class="font-semibold">Rule:</span> {{ ins.rule }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── ACTION PLAN ──────────────────────────────────────────────────────── -->
+{% if D.action_items %}
+<div class="card p-5 mb-5">
+  <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70 mb-4">Action plan — ranked by impact</h2>
+  <div class="space-y-3">
+    {% set impact_colors = {'high': '#e74c3c', 'medium': '#f4c542', 'low': '#6b7280'} %}
+    {% for item in D.action_items %}
+      <div class="flex items-start gap-3 pb-3 {% if not loop.last %}border-b border-midnight-800{% endif %}">
+        <div class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono mt-0.5"
+             style="background:{{ impact_colors.get(item.impact, '#6b7280') }}1a; color:{{ impact_colors.get(item.impact, '#6b7280') }}; border:1px solid {{ impact_colors.get(item.impact, '#6b7280') }}40;">
+          {{ item.n }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <p class="text-[13px] text-ivory leading-snug">{{ item.text }}</p>
+            <span class="shrink-0 text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded"
+                  style="background:{{ impact_colors.get(item.impact, '#6b7280') }}1a; color:{{ impact_colors.get(item.impact, '#6b7280') }};">{{ item.impact }}</span>
+          </div>
+          <p class="text-[11px] text-zinc-500 mt-1">{{ item.why }}</p>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── FULL COACHING REPORT ─────────────────────────────────────────────── -->
+{% if D.report_html %}
+<div class="card p-5 mb-5">
+  <div class="flex items-baseline justify-between mb-4">
+    <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70">Full coaching report</h2>
+    <span class="text-[10px] text-zinc-600 font-mono">{{ D.last_run_date }}</span>
+  </div>
+  <div class="max-h-[640px] overflow-y-auto pr-3 prose-pa">
+    {{ D.report_html | safe }}
+  </div>
+</div>
+{% else %}
+<div class="card p-5 mb-5 border-dashed">
+  <div class="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">No coaching report yet</div>
+  <p class="text-sm text-zinc-500">Run the agent below to generate your first prompt efficiency analysis.</p>
+</div>
+{% endif %}
+
+<style>
+  .prose-pa h2 { font-family: '"Cormorant Garamond"', Georgia, serif; font-size: 1.15rem; color: #e8ddc1; margin-top: 1.4rem; margin-bottom: 0.5rem; padding-bottom: 0.35rem; border-bottom: 1px solid #1a2138; }
+  .prose-pa h2:first-child { margin-top: 0; }
+  .prose-pa h3 { font-size: 0.85rem; color: #f6d57e; margin-top: 1.1rem; margin-bottom: 0.4rem; font-weight: 600; }
+  .prose-pa p { font-size: 12.5px; color: #b8bcc8; line-height: 1.65; margin-bottom: 0.6rem; }
+  .prose-pa strong { color: #e8ddc1; font-weight: 600; }
+  .prose-pa em { color: #93a1b8; }
+  .prose-pa ul, .prose-pa ol { font-size: 12.5px; color: #b8bcc8; margin: 0.4rem 0 0.8rem 1.2rem; line-height: 1.6; }
+  .prose-pa li { margin-bottom: 0.3rem; }
+  .prose-pa blockquote { border-left: 2px solid #d4a017; padding-left: 0.8rem; margin: 0.5rem 0; color: #93a1b8; font-style: italic; font-size: 12px; }
+  .prose-pa hr { border-color: #1a2138; margin: 1.2rem 0; }
+  .prose-pa table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 0.6rem 0 1rem; }
+  .prose-pa th { text-align: left; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; font-size: 9px; padding: 5px 8px; border-bottom: 1px solid #252e4a; }
+  .prose-pa td { padding: 5px 8px; border-bottom: 1px solid #1a2138; color: #b8bcc8; font-family: '"JetBrains Mono"', monospace; }
+  .prose-pa tr:hover td { background: rgba(167,139,250,0.04); }
+</style>
+
+<!-- ── RUN FORM ────────────────────────────────────────────────────────── -->
+<div class="card p-5">
+  <div class="flex items-baseline justify-between mb-4">
+    <h2 class="text-[10px] uppercase tracking-widest text-violet-400/70">Run analysis now</h2>
+    <span class="text-[10px] text-zinc-600">Next scheduled: {{ D.next_run_date or '—' }}</span>
+  </div>
+  <div id="run-result" class="mb-3"></div>
+  {% include '_run_forms/prompt_analyst.html' %}
+  <p class="text-[10px] text-zinc-700 mt-3">
+    Requires <span class="font-mono">ANTHROPIC_API_KEY</span> in .env.
+    The JSONL scan is free — only the Claude coaching call costs tokens (~2K input, ~1K output).
+  </p>
+</div>

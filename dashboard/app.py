@@ -30,8 +30,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import csv
+import html
 import hashlib
 import hmac
+import ipaddress
 import io
 import json
 import os
@@ -40,6 +42,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import AsyncIterator
+from urllib.parse import urlsplit
 
 import httpx
 from dotenv import load_dotenv
@@ -120,52 +123,187 @@ WEBHOOK_MAX_AGE_SECONDS = 300              # 5 min window for replay protection
 SEEN_NONCES: dict[str, float] = {}         # nonce → expiry timestamp
 RATE_LIMIT_WINDOW = 60                     # seconds
 RATE_LIMIT_MAX_RUNS = 12                   # agent runs per IP per minute
+PUBLIC_EMAIL_RATE_LIMIT = 5                # outbound-email attempts per IP/minute
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
 
-# Paths that bypass Basic Auth (HMAC-protected or fully public)
-_NO_BASIC_AUTH_PATHS = {
+# Fully public paths. Keep this list deliberately small: everything else fails
+# closed when dashboard credentials are missing.
+_PUBLIC_PATHS = {
     "/robots.txt",
     "/api/healthz",
+    "/api/email/signup",
+    "/api/labs/results-email",
 }
-_NO_BASIC_AUTH_PREFIXES = (
-    "/api/webhooks/",   # HMAC-signed by n8n
+_PUBLIC_PREFIXES = (
     "/static/",
+    "/confirm/",
+    "/unsubscribe/",
 )
+_WEBHOOK_PREFIX = "/api/webhooks/"  # authenticated separately with HMAC
+_PUBLIC_EMAIL_PATHS = {"/api/email/signup", "/api/labs/results-email"}
 
 
 def _dashboard_creds() -> tuple[str, str] | None:
     user = os.getenv("INDRA_DASHBOARD_USER", "").strip()
     pwd = os.getenv("INDRA_DASHBOARD_PASSWORD", "").strip()
-    if not user or not pwd:
+    if not user or len(pwd) < 16:
         return None
     return user, pwd
+
+
+def _client_ip(request: Request) -> str:
+    """Return a rate-limit identity without blindly trusting proxy headers."""
+    peer = request.client.host if request.client else "unknown"
+    trusted = os.getenv("INDRA_TRUSTED_PROXIES", "").strip()
+    if not trusted or peer == "unknown":
+        return peer
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+        networks = [
+            ipaddress.ip_network(item.strip(), strict=False)
+            for item in trusted.split(",") if item.strip()
+        ]
+    except ValueError:
+        return peer
+    if not any(peer_ip in network for network in networks):
+        return peer
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    try:
+        return str(ipaddress.ip_address(forwarded)) if forwarded else peer
+    except ValueError:
+        return peer
+
+
+def _rate_limited(bucket_name: str, client_ip: str, maximum: int) -> bool:
+    now = time.time()
+    bucket = _rate_buckets[f"{bucket_name}:{client_ip}"]
+    cutoff = now - RATE_LIMIT_WINDOW
+    bucket[:] = [timestamp for timestamp in bucket if timestamp > cutoff]
+    if len(bucket) >= maximum:
+        return True
+    bucket.append(now)
+    return False
+
+
+def _configured_public_base() -> str | None:
+    value = os.getenv("DASHBOARD_PUBLIC_URL", "").strip().rstrip("/")
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.username or parsed.password:
+        return None
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        return None
+    if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        return None
+    return value
+
+
+def _allowed_results_url(value: str) -> bool:
+    """Prevent the public email endpoint being used to send phishing links."""
+    try:
+        candidate = urlsplit(value)
+    except ValueError:
+        return False
+    if candidate.scheme not in {"http", "https"} or not candidate.netloc:
+        return False
+    if candidate.username or candidate.password:
+        return False
+    if candidate.scheme == "http" and candidate.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        return False
+    allowed_origins = {
+        origin
+        for raw in (os.getenv("SITE_ORIGIN", ""), os.getenv("SITE_BASE_URL", ""))
+        if (origin := raw.strip().rstrip("/"))
+    }
+    for origin in allowed_origins:
+        try:
+            expected = urlsplit(origin)
+        except ValueError:
+            continue
+        if (candidate.scheme, candidate.netloc) == (expected.scheme, expected.netloc):
+            return True
+    return False
+
+
+def _assess_secret() -> bytes | None:
+    secret = os.getenv("ASSESS_SECRET", "").strip()
+    return secret.encode() if len(secret) >= 32 else None
+
+
+def _allowed_hosts() -> set[str]:
+    hosts = {"localhost", "127.0.0.1", "::1", "testserver"}
+    hosts.update(
+        item.strip().lower()
+        for item in os.getenv("INDRA_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    )
+    for raw in (
+        os.getenv("DASHBOARD_PUBLIC_URL", ""),
+        os.getenv("SITE_ORIGIN", ""),
+        os.getenv("SITE_BASE_URL", ""),
+    ):
+        try:
+            if hostname := urlsplit(raw.strip()).hostname:
+                hosts.add(hostname.lower())
+        except ValueError:
+            continue
+    return hosts
+
+
+def _valid_host_header(raw_host: str) -> bool:
+    """Validate Host without using Starlette's reconstructed request URL."""
+    if not raw_host or any(char in raw_host for char in "/\\\r\n\t"):
+        return False
+    try:
+        parsed = urlsplit(f"//{raw_host}")
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    if not hostname or parsed.username or parsed.password:
+        return False
+    return hostname.lower() in _allowed_hosts()
 
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     """Combined security layer: Basic Auth + size limit + rate limit + noindex."""
-    path = request.url.path
+    # Use the ASGI path, never request.url.path: vulnerable Starlette releases
+    # can reconstruct request.url from a malicious Host/path combination.
+    path = request.scope.get("path", "")
+    if not isinstance(path, str) or not path.startswith("/") or "\x00" in path:
+        return JSONResponse({"detail": "Invalid request path"}, status_code=400)
+    if not _valid_host_header(request.headers.get("host", "")):
+        return JSONResponse({"detail": "Invalid Host header"}, status_code=400)
 
     # 1) Request size limit (defense against payload abuse)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > REQUEST_MAX_BYTES:
+    try:
+        oversized = bool(content_length) and int(content_length) > REQUEST_MAX_BYTES
+    except ValueError:
+        return JSONResponse({"detail": "Invalid Content-Length"}, status_code=400)
+    if oversized:
         return JSONResponse(
             {"detail": "Request body too large"},
             status_code=413,
             headers={"X-Robots-Tag": "noindex, nofollow"},
         )
 
-    # 2) HTTP Basic Auth — OPT-IN. Enforced only if INDRA_DASHBOARD_PASSWORD is
-    #    set in .env. Default (no creds configured) is OPEN, which is safe when
-    #    Indra binds to 127.0.0.1 only (the default). If you ever expose the
-    #    dashboard publicly, set the password env var and auth turns back on.
+    public_request = path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES)
+    webhook_request = path.startswith(_WEBHOOK_PREFIX)
+
+    # 2) HTTP Basic Auth — fail closed for every administrative surface.
+    # Public browser flows and HMAC-authenticated webhooks are explicit exceptions.
     creds = _dashboard_creds()
-    bypass_auth = (
-        creds is None
-        or path in _NO_BASIC_AUTH_PATHS
-        or any(path.startswith(p) for p in _NO_BASIC_AUTH_PREFIXES)
-    )
-    if not bypass_auth:
+    if not public_request and not webhook_request:
+        if creds is None:
+            return JSONResponse(
+                {"detail": "Dashboard authentication is not configured"},
+                status_code=503,
+            )
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Basic "):
             return Response(
@@ -197,21 +335,46 @@ async def security_middleware(request: Request, call_next):
                 media_type="text/plain",
             )
 
-    # 3) Rate limit on the expensive agent run endpoints
+    # Reject browser cross-site state changes on authenticated admin routes.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not public_request and not webhook_request:
+        if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+            return JSONResponse({"detail": "Cross-site request rejected"}, status_code=403)
+        origin = request.headers.get("origin", "").strip().rstrip("/")
+        if origin:
+            allowed_admin_origins = {str(request.base_url).rstrip("/")}
+            if configured_base := _configured_public_base():
+                allowed_admin_origins.add(configured_base)
+            if origin not in allowed_admin_origins:
+                return JSONResponse({"detail": "Origin is not allowed"}, status_code=403)
+
+    # 3) Rate limit expensive agent runs and public outbound-email routes.
+    client_ip = _client_ip(request)
     if path.startswith("/api/run/"):
-        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
-        now = time.time()
-        bucket = _rate_buckets[client_ip]
-        # Drop entries older than the window
-        cutoff = now - RATE_LIMIT_WINDOW
-        bucket[:] = [t for t in bucket if t > cutoff]
-        if len(bucket) >= RATE_LIMIT_MAX_RUNS:
+        if _rate_limited("agent-run", client_ip, RATE_LIMIT_MAX_RUNS):
             return JSONResponse(
                 {"detail": f"Rate limit: max {RATE_LIMIT_MAX_RUNS} runs per {RATE_LIMIT_WINDOW}s"},
                 status_code=429,
                 headers={"Retry-After": str(RATE_LIMIT_WINDOW), "X-Robots-Tag": "noindex, nofollow"},
             )
-        bucket.append(now)
+    if request.method == "POST" and path in _PUBLIC_EMAIL_PATHS:
+        if _rate_limited("public-email", client_ip, PUBLIC_EMAIL_RATE_LIMIT):
+            return JSONResponse(
+                {"detail": f"Rate limit: max {PUBLIC_EMAIL_RATE_LIMIT} email requests per {RATE_LIMIT_WINDOW}s"},
+                status_code=429,
+                headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
+            )
+
+    # Enforce the body cap even for chunked requests, for which Content-Length
+    # is absent. Public endpoints never accept multipart file uploads.
+    if request.method in {"POST", "PUT", "PATCH"}:
+        body = await request.body()
+        if len(body) > REQUEST_MAX_BYTES:
+            return JSONResponse({"detail": "Request body too large"}, status_code=413)
+        media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if public_request and media_type == "multipart/form-data":
+            return JSONResponse({"detail": "Multipart requests are not accepted"}, status_code=415)
+        if media_type == "application/x-www-form-urlencoded" and body.count(b"&") >= 100:
+            return JSONResponse({"detail": "Too many form fields"}, status_code=413)
 
     # 4) Execute the handler
     response = await call_next(request)
@@ -244,7 +407,7 @@ def _prune_seen_nonces() -> None:
 
 def _shared_secret() -> str:
     secret = os.getenv("INDRA_N8N_SHARED_SECRET", "").strip()
-    return secret
+    return secret if len(secret) >= 32 else ""
 
 
 def _verify_hmac(request: Request, body: bytes) -> None:
@@ -843,10 +1006,23 @@ def _brief_list() -> dict:
 
 
 def _render_brief_md(md: str) -> str:
-    """Render brief markdown to HTML with our extensions (tables, fenced code, autolink)."""
+    """Render Markdown and remove raw/scriptable HTML before marking it safe."""
     try:
+        import bleach
         import markdown as _md
-        return _md.markdown(md, extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
+        rendered = _md.markdown(md, extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
+        return bleach.clean(
+            rendered,
+            tags={
+                "a", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3",
+                "h4", "h5", "h6", "hr", "li", "ol", "p", "pre", "strong",
+                "table", "tbody", "td", "th", "thead", "tr", "ul",
+            },
+            attributes={"a": ["href", "title"]},
+            protocols={"http", "https", "mailto"},
+            strip=True,
+            strip_comments=True,
+        )
     except Exception:
         # Fallback: rudimentary line-break preservation if lib import fails
         from html import escape as _e
@@ -1825,7 +2001,6 @@ def _prompt_analyst_stats() -> dict:
     """Scan JSONL sessions, categorise messages, return analysis + insights + rendered report.
     No Claude call — pure data. Cached 5 min."""
     from datetime import date as _date, timedelta as _td
-    import markdown as _md
     now = time.time()
     if _PROMPT_ANALYST_CACHE["data"] and (now - _PROMPT_ANALYST_CACHE["ts"]) < _PROMPT_ANALYST_TTL:
         return _PROMPT_ANALYST_CACHE["data"]
@@ -1974,10 +2149,7 @@ def _prompt_analyst_stats() -> dict:
                 # Skip the title + generated header, render body as HTML
                 body_start = raw.find("\n## ")
                 body = raw[body_start:].strip() if body_start != -1 else raw.strip()
-                out["report_html"] = _md.markdown(
-                    body,
-                    extensions=["tables", "fenced_code"],
-                )
+                out["report_html"] = _render_brief_md(body)
             except Exception:
                 pass
 
@@ -2608,7 +2780,8 @@ def api_view_artifact(artifact_id: int):
 
 @app.get("/api/healthz")
 def api_healthz():
-    return JSONResponse({"ok": True, "langfuse": lf.get_status()})
+    # Public liveness probe: deliberately excludes integration/configuration state.
+    return JSONResponse({"ok": True})
 
 
 # ---------- DRAFTS QUEUE (approve / reject / send via n8n) ----------
@@ -3104,20 +3277,22 @@ def api_competitor_watcher_latest(request: Request):
 
 
 def _doi_email_html(confirm_url: str, email: str) -> str:
+    safe_email = html.escape(email, quote=True)
+    safe_url = html.escape(confirm_url, quote=True)
     return f"""\
 <!doctype html>
 <html><body style="font-family: -apple-system, system-ui, sans-serif; max-width: 540px; margin: 24px auto; color: #222; line-height: 1.55;">
   <h2 style="margin-bottom: 8px;">Confirm your email</h2>
-  <p>Hi — you (or someone using <b>{email}</b>) asked to subscribe.</p>
+  <p>Hi — you (or someone using <b>{safe_email}</b>) asked to subscribe.</p>
   <p>Click the button below to confirm. If this wasn't you, ignore this email and nothing happens.</p>
   <p style="margin: 28px 0;">
-    <a href="{confirm_url}"
+    <a href="{safe_url}"
        style="background:#d4a017;color:#0a0e1f;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:600;">
       Confirm subscription
     </a>
   </p>
   <p style="font-size:12px;color:#666;">Or paste this link into your browser:<br>
-    <span style="font-family:monospace;">{confirm_url}</span>
+    <span style="font-family:monospace;">{safe_url}</span>
   </p>
   <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
   <p style="font-size:11px;color:#999;">You're receiving this because someone entered this address on a sign-up form. This is a one-time confirmation; we won't email again unless you confirm.</p>
@@ -3147,6 +3322,12 @@ def api_email_signup(request: Request, email: str = Form(...), source: str = For
     email_clean = (email or "").strip().lower()
     if not email_signups.is_valid_email(email_clean):
         return JSONResponse({"ok": False, "error": "Invalid email address"}, status_code=400)
+    public_base = _configured_public_base()
+    if not public_base:
+        return JSONResponse(
+            {"ok": False, "error": "DASHBOARD_PUBLIC_URL is not configured"},
+            status_code=503,
+        )
 
     try:
         token, is_new, status = email_signups.create_or_get_pending(
@@ -3174,8 +3355,7 @@ def api_email_signup(request: Request, email: str = Form(...), source: str = For
         })
 
     # is_new=True, OR status=='failed_send' (retry path). Send the DOI email.
-    base = os.getenv("DASHBOARD_PUBLIC_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
-    confirm_url = f"{base}/confirm/{token}"
+    confirm_url = f"{public_base}/confirm/{token}"
 
     ok, err = resend_client.send(
         to=email_clean,
@@ -3359,6 +3539,18 @@ async def api_labs_results_email(request: Request):
     results_url = (body.get("results_url") or "").strip()
     newsletter_opt_in = bool(body.get("newsletter_opt_in", False))
 
+    public_base = _configured_public_base()
+    if not public_base:
+        return JSONResponse(
+            {"ok": False, "error": "DASHBOARD_PUBLIC_URL is not configured"},
+            status_code=503,
+        )
+    if _assess_secret() is None:
+        return JSONResponse(
+            {"ok": False, "error": "ASSESS_SECRET must contain at least 32 characters"},
+            status_code=503,
+        )
+
     if not email_signups.is_valid_email(email):
         return JSONResponse({"ok": False, "error": "Invalid email address"}, status_code=400)
     if test_id not in assessment_emails.KNOWN_TESTS:
@@ -3368,10 +3560,12 @@ async def api_labs_results_email(request: Request):
         )
     if not run_id or len(run_id) > 120:
         return JSONResponse({"ok": False, "error": "Missing or oversized run_id"}, status_code=400)
-    if not summary_text:
+    if name and len(name) > 120:
+        return JSONResponse({"ok": False, "error": "Oversized name"}, status_code=400)
+    if not summary_text or len(summary_text) > 10_000:
         return JSONResponse({"ok": False, "error": "Missing summary_text"}, status_code=400)
-    if not results_url or not results_url.startswith(("http://", "https://")):
-        return JSONResponse({"ok": False, "error": "Missing or invalid results_url"}, status_code=400)
+    if len(results_url) > 2_048 or not _allowed_results_url(results_url):
+        return JSONResponse({"ok": False, "error": "results_url origin is not allowed"}, status_code=400)
 
     # Idempotency: if we already have a sent row for (email, test, run), short-circuit.
     # We still return an unlock_token so the labs UI reveals the deep report on
@@ -3393,8 +3587,7 @@ async def api_labs_results_email(request: Request):
             token = email_signups.confirm_via_labs(email, source=f"labs:{test_id}")
         except ValueError as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
-        base = os.getenv("DASHBOARD_PUBLIC_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
-        unsubscribe_url = f"{base}/unsubscribe/{token}"
+        unsubscribe_url = f"{public_base}/unsubscribe/{token}"
 
     # Record pending row (or reuse the existing pending/failed one) before the send.
     if existing:
@@ -3450,8 +3643,9 @@ def _make_unlock_token(email: str, test_id: str, run_id: str) -> str:
     report. Not signed — labs treats presence + length as the gate, not the
     value (matches the existing unlock.js contract). HMAC over the triple so
     the token is stable for a given submission (idempotent on retry)."""
-    import hashlib, hmac, base64
-    secret = os.getenv("ASSESS_SECRET", "indra-labs-local-dev-secret").encode()
+    secret = _assess_secret()
+    if secret is None:
+        raise RuntimeError("ASSESS_SECRET must contain at least 32 characters")
     msg = f"{email}|{test_id}|{run_id}".encode()
     digest = hmac.new(secret, msg, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -3459,8 +3653,14 @@ def _make_unlock_token(email: str, test_id: str, run_id: str) -> str:
 
 @app.get("/unsubscribe/{token}", response_class=HTMLResponse)
 def page_unsubscribe(request: Request, token: str):
+    row = email_signups.get_by_token(token)
+    return _render(request, "_unsubscribed.html", active_view="", row=row, completed=False)
+
+
+@app.post("/unsubscribe/{token}", response_class=HTMLResponse)
+def post_unsubscribe(request: Request, token: str):
     row = email_signups.unsubscribe_by_token(token)
-    return _render(request, "_unsubscribed.html", active_view="", row=row)
+    return _render(request, "_unsubscribed.html", active_view="", row=row, completed=True)
 
 
 @app.post("/api/delivery-retry")

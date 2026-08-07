@@ -28,6 +28,7 @@ The workflow view lets you see exactly what each agent does step-by-step. If you
 
 ```bash
 cd "Agents_end to end"
+python3 --version  # Python 3.11 or newer is required
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt

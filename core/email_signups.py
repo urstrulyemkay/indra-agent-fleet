@@ -124,6 +124,19 @@ def confirm(token: str) -> Optional[dict]:
         return dict(row)
 
 
+def get_by_token(token: str) -> Optional[dict]:
+    """Return a signup row without changing its subscription state."""
+    if not token:
+        return None
+    init_table()
+    with _conn() as c:
+        row = c.execute(
+            "SELECT * FROM email_signups WHERE token = ?",
+            (token,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
 def confirm_via_labs(email: str, source: str) -> str:
     """Newsletter opt-in path from /labs/ assessment completion.
 

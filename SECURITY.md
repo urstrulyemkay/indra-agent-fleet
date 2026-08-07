@@ -17,14 +17,15 @@
 
 | Layer | Implementation | Where |
 |---|---|---|
-| **HTTP Basic Auth** on all dashboard + API routes | Middleware in `dashboard/app.py` — fail-closed if `INDRA_DASHBOARD_USER` / `INDRA_DASHBOARD_PASSWORD` unset | Returns 401 on missing creds, 500 if server unconfigured |
+| **HTTP Basic Auth** on administrative routes | Middleware in `dashboard/app.py` fails closed if `INDRA_DASHBOARD_USER` / `INDRA_DASHBOARD_PASSWORD` are unset | Returns 401 for bad/missing credentials and 503 when server auth is unconfigured |
 | **HMAC-SHA256** on all n8n webhooks | `_verify_hmac()` / `_sign_payload()` in `dashboard/app.py` | Timing-safe compare via `hmac.compare_digest` |
 | **Replay protection** on webhooks | Timestamp (±5 min window) + one-time-use nonce | In-memory nonce store with auto-prune |
 | **Request size cap** | 256 KB hard limit | Middleware rejects with 413 |
-| **Rate limiting** on agent runs | 12 runs per IP per 60s window | Middleware rejects with 429 |
+| **Host/path validation** | Uses the raw ASGI path and an exact host allowlist instead of reconstructed `request.url` | Mitigates known Starlette Host/path confusion advisories |
+| **Rate limiting** | 12 agent runs and 5 public email requests per trusted client IP per 60s window | Proxy headers are accepted only from `INDRA_TRUSTED_PROXIES` |
 | **No-index headers** | `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` on every response + `robots.txt: Disallow: /` | Middleware |
 | **Defense headers** | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` denying camera/mic/geolocation | Middleware |
-| **XSS prevention** | Jinja2 auto-escape in templates; explicit HTML escape + `[a-z0-9_-]` slugging in SSE feed JavaScript | Templates + `shell.html` |
+| **XSS prevention** | Jinja2 auto-escape plus Bleach allowlist sanitization for Markdown rendered with `|safe` | Templates + `_render_brief_md()` |
 | **SQL injection** | All queries use parameterized SQLite statements | `core/status_bus.py` |
 | **Filesystem permissions** | `chmod 600` on `data/status.db`, `chmod 700` on `data/` directory | `_restrict_perms()` in `status_bus.py` |
 | **`.env` file** | `chmod 600`, listed in `.gitignore` | Manual |
@@ -33,23 +34,22 @@
 
 | Action | Required | Why |
 |---|---|---|
-| Set `INDRA_DASHBOARD_PASSWORD` to a strong random value in `.env` | YES | Without it, dashboard fail-closes with 500 |
+| Set `INDRA_DASHBOARD_USER` and a ≥16-character `INDRA_DASHBOARD_PASSWORD` in `.env` | YES | Missing/weak credentials make administrative routes fail closed with 503 |
 | Set `INDRA_N8N_SHARED_SECRET` to ≥32 random bytes, identical in n8n Cloud env vars | YES | Without it, webhooks fail-close with 500 |
+| Set `DASHBOARD_PUBLIC_URL` to the canonical HTTPS origin | For email flows | Prevents Host-header injection into confirmation/unsubscribe links |
+| Set `ASSESS_SECRET` to ≥32 random characters | For labs email flow | No insecure development fallback is used |
+| Set `INDRA_TRUSTED_PROXIES` to exact proxy IPs/CIDRs | Behind a proxy | Prevents spoofed forwarding headers from bypassing per-IP limits |
+| Set `INDRA_ALLOWED_HOSTS` to any additional exact hostnames | When needed | Rejects poisoned or unexpected Host headers |
 | Enable **Cloudflare Access** on top of the tunnel for human-side traffic | STRONGLY RECOMMENDED | Defense in depth; Cloudflare blocks at the edge before Indra sees the request |
 | Use **Cloudflare Service Auth tokens** for n8n's webhook traffic if Access is enabled | If Access enabled | n8n's machine traffic bypasses human OAuth |
 | Use a **named tunnel** (not quick tunnel) for anything beyond development | For production | Quick tunnel URLs change every restart — fine for dev, breaks Meta webhook subscriptions |
 | Rotate any secret pasted in chat | See below | Conversation logs persist; chat ≠ secure channel |
 
-## URGENT: Rotate these secrets now
+## Secret rotation
 
-You pasted these in chat during this conversation. They are exposed in the conversation log permanently. Treat as compromised and rotate:
-
-1. **`LANGFUSE_SECRET_KEY`** — `sk-lf-a15167d3-...`
-   - Go to https://cloud.langfuse.com → Settings → API Keys → revoke the exposed key → create new
-   - Update your `.env` (`LANGFUSE_SECRET_KEY`)
-   - The `LANGFUSE_PUBLIC_KEY` is fine to leave (it's the public half)
-
-You can do this in 2 minutes. Don't skip it.
+If a credential is ever pasted into chat, logs, an issue, or a commit, revoke it
+through the provider and replace the local `.env` value. Do not publish even a
+partial credential identifier in this repository.
 
 ## Secret hygiene — things to NEVER do
 
@@ -57,7 +57,7 @@ You can do this in 2 minutes. Don't skip it.
 - ❌ Never commit `.env` to git (it's in `.gitignore`; verify after every change)
 - ❌ Never log secret values via `self.log()` — they end up in the activity feed and Langfuse traces
 - ❌ Never hardcode tokens in Claude prompts — Langfuse stores prompts in clear and the prompt UI shows them to anyone with Langfuse access
-- ❌ Never hardcode tokens in n8n function nodes — your existing workflows (LinkedIn Content Engine, Drivex, AI Twitter) have **`sk-ant-...` keys hardcoded in node code**. This is a pre-existing issue inherited from before Indra; move them to n8n's credential store at your convenience
+- ❌ Never hardcode tokens in workflow/function nodes; use the provider's credential store
 
 ## Webhook security details
 
@@ -84,13 +84,22 @@ You can do this in 2 minutes. Don't skip it.
 - HTMX requests inherit the same auth (browser handles it)
 - To log out, close the browser tab (Basic Auth has no server-side session to invalidate)
 
-## Pre-existing risks from your other projects
+## Dependency advisory mitigations
 
-These are **outside Indra's blast radius** but worth flagging since they relate to your account:
+Python 3.11 or newer is required so patched dependency releases can be installed.
+`bleach`, `python-multipart`, and `python-dotenv` are pinned to patched versions.
 
-- Your existing n8n workflows (LinkedIn / Drivex / AI Twitter) hardcode `ANTHROPIC_API_KEY` in function-node code. Move them to n8n's credential store
-- Your existing n8n API key (JWT) is in a reference file you keep on disk. Make sure that file is not in any synced folder (iCloud, Dropbox, etc.) or git repo
-- Your `~/.n8n/database.sqlite` contains all stored credentials. The file is encrypted but the encryption key is in `~/.n8n/config`. Both files need to live on a disk you own
+FastAPI 0.128.8 still requires Starlette `<1.0`, while several 2026 Starlette
+advisories designate fixes only in Starlette 1.x. Until FastAPI supports that
+series, this application mitigates the affected behavior as follows:
+
+- `PYSEC-2026-161` and `PYSEC-2026-248`: raw ASGI path validation plus exact Host validation; security decisions never use `request.url.path`.
+- `PYSEC-2026-249`: a body-size cap is enforced for chunked and fixed-length requests, URL-encoded fields are capped, and public multipart requests are rejected.
+- `PYSEC-2026-2280`: the application uses FastAPI function routes with explicit HTTP methods, not unconstrained `HTTPEndpoint` subclasses.
+- `PYSEC-2026-2281`: the affected Windows UNC-path behavior is outside the supported POSIX deployment; the static directory is fixed by the application.
+
+Remove these temporary mitigations only after upgrading to a FastAPI release
+compatible with Starlette 1.3.1 or newer.
 
 ## What I will NOT do
 

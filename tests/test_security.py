@@ -120,6 +120,23 @@ class SecurityTests(unittest.TestCase):
         )
         self.assertEqual(oversized_fields.status_code, 413)
 
+    def test_public_signup_form_still_parses_after_body_guard(self):
+        env = {"DASHBOARD_PUBLIC_URL": "https://dashboard.example.test"}
+        with (
+            patch.dict(os.environ, env, clear=False),
+            patch(
+                "dashboard.app.email_signups.create_or_get_pending",
+                return_value=("safe-token", True, "pending"),
+            ),
+            patch("dashboard.app.resend_client.send", return_value=(True, None)),
+        ):
+            response = TestClient(app).post(
+                "/api/email/signup",
+                data={"email": "person@example.test", "source": "security-test"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "pending")
+
     def test_results_url_is_restricted_to_configured_origin(self):
         with patch.dict(os.environ, {"SITE_ORIGIN": "https://example.test"}, clear=False):
             self.assertTrue(_allowed_results_url("https://example.test/labs/result?id=1"))
